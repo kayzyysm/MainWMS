@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronUp, Bell, ArrowLeft, Box, CheckCircle2 } from 'lucide-react';
+import { ChevronUp, Bell, ArrowLeft, Box, CheckCircle2, Layers, History, Clock } from 'lucide-react';
 
 export default function PlannerTerminal({ currentUser, onLogout }) {
   const [viewMode, setViewMode] = useState('list');
@@ -8,17 +8,24 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
   // State เก็บรายการสินค้าคงเหลือในใบเสร็จ
   const [remainingItems, setRemainingItems] = useState([]);
   
-  // State สำหรับสินค้าที่กำลังถูกคลิกเลือกจากฝั่งขวา (เพื่อให้กระพริบ)
+  // State สำหรับสินค้าที่กำลังถูกคลิกเลือกจากฝั่งขวา
   const [selectedItemToStore, setSelectedItemToStore] = useState(null);
   
-  // State เก็บข้อมูลสินค้าที่จัดเก็บลง Rack และ Slot { rackId: [{ slot: 'Slot 1', name: '...', qty: ... }, ...] }
+  // State เก็บข้อมูล 9 Slot ของแต่ละ Rack: { 'ZONE-A1': { 'Slot 1': { name: '...', qty: 100 }, 'Slot 2': null, ... } }
   const [rackStorage, setRackStorage] = useState({});
 
-  // State ควบคุม Modal สำหรับเลือก Slot และจำนวน
+  // State เก็บประวัติการจัดเก็บ (Activity Log)
+  const [storageLogs, setStorageLogs] = useState([]);
+
+  // State ควบคุม Modal แสดง 9 Slot ของ Rack ที่เลือก
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [targetRackId, setTargetRackId] = useState(null);
-  const [selectedSlot, setSelectedSlot] = useState('Slot 1 (Top)');
+  
+  // State สำหรับ Modal ย่อยเวลากดเลือก Slot ที่ต้องการเติมหรือใส่ของ
+  const [selectedSlotForAction, setSelectedSlotForAction] = useState(null);
   const [inputQty, setInputQty] = useState(1);
+
+  const MAX_PALLET_CAPACITY = 120; // กำหนดความจุสูงสุดต่อพาเลท/slot
 
   const plannerReceipts = [
     { id: '1', code: 'WH-INV-342321', qtyItems: 4, items: [
@@ -46,11 +53,11 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
     { id: 'ZONE-B2', name: 'Zone B-2 (Rack 4)' },
   ];
 
-  const slotOptions = [
-    'Slot 1 (Top)', 
-    'Slot 2 (Middle-Top)', 
-    'Slot 3 (Middle-Bottom)', 
-    'Slot 4 (Bottom)'
+  // สร้างรายชื่อ 9 Slot มาตรฐานต่อ Rack
+  const rackSlots = [
+    'Slot 1', 'Slot 2', 'Slot 3', 
+    'Slot 4', 'Slot 5', 'Slot 6', 
+    'Slot 7', 'Slot 8', 'Slot 9'
   ];
 
   const handleOpenOrganize = (receipt) => {
@@ -58,43 +65,108 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
     setRemainingItems(receipt.items.map(i => ({ ...i })));
     setSelectedItemToStore(null);
     setRackStorage({});
+    setStorageLogs([]);
     setViewMode('organize');
   };
 
   // เมื่อคลิกที่ Rack ใน 3D Model ฝั่งซ้าย
   const handleRackClick = (rackId) => {
     if (!selectedItemToStore) {
-      alert('⚠️ กรุณาคลิกเลือกสินค้าจากเมนูด้านขวาก่อนคลิกเลือก Rack ใน 3D Model');
+      alert('⚠️ กรุณาคลิกเลือกสินค้าจากเมนูด้านขวาก่อนคลิกเลือก Rack');
       return;
     }
     setTargetRackId(rackId);
-    setSelectedSlot(slotOptions[0]);
-    setInputQty(selectedItemToStore.qty); // ตั้งค่าจำนวนเริ่มต้นเป็นจำนวนที่เหลือทั้งหมด
+    setSelectedSlotForAction(null);
     setIsModalOpen(true);
   };
 
-  // ยืนยันการจัดเก็บจาก Modal
-  const confirmStoreItem = () => {
+  // ดึงข้อมูล 9 Slot ของ Rack ที่กำลังเลือกอยู่ (ถ้ายังไม่มีให้สร้างโครงว่าง 9 Slot)
+  const getRackSlotsData = (rackId) => {
+    if (!rackId) return {};
+    const currentRack = rackStorage[rackId] || {};
+    const initialized = { ...currentRack };
+    rackSlots.forEach(slot => {
+      if (!initialized[slot]) {
+        initialized[slot] = null; // null คือว่าง
+      }
+    });
+    return initialized;
+  };
+
+  // คลิกเลือก Slot เฉพาะใน Modal 9 ช่อง เพื่อจัดการเติมของหรือเปิดพาเลทใหม่
+  const handleSelectSlotInModal = (slotName, slotData) => {
+    setSelectedSlotForAction(slotName);
+    
+    if (slotData) {
+      // กรณีมีพาเลทเดิมอยู่แล้ว คำนวณพื้นที่เหลือ (Remaining capacity)
+      const remainingSpace = MAX_PALLET_CAPACITY - slotData.qty;
+      const defaultFill = Math.min(selectedItemToStore.qty, Math.max(0, remainingSpace));
+      setInputQty(defaultFill);
+    } else {
+      // กรณี Slot ว่าง (พาเลทใหม่) ใส่จำนวนเต็มของสินค้าที่เลือก หรือเต็มความจุ
+      setInputQty(Math.min(selectedItemToStore.qty, MAX_PALLET_CAPACITY));
+    }
+  };
+
+  // ยืนยันการจัดเก็บลง Slot ที่เลือก
+  const confirmStoreToSlot = () => {
     const qtyToStore = parseInt(inputQty);
     if (isNaN(qtyToStore) || qtyToStore <= 0) {
       alert('กรุณาระบุจำนวนให้ถูกต้อง');
       return;
     }
     if (qtyToStore > selectedItemToStore.qty) {
-      alert(`จำนวนเกินกว่าที่มีอยู่ (เหลือ ${selectedItemToStore.qty} ชิ้น)`);
+      alert(`จำนวนเกินกว่าสินค้าที่มีอยู่ (เหลือ ${selectedItemToStore.qty} ชิ้น)`);
       return;
     }
 
-    // 1. บันทึกลง Rack และ Slot ใน 3D Model
-    setRackStorage(prev => {
-      const currentRackItems = prev[targetRackId] || [];
-      return {
-        ...prev,
-        [targetRackId]: [...currentRackItems, { slot: selectedSlot, name: selectedItemToStore.name, qty: qtyToStore }]
-      };
-    });
+    const currentSlots = getRackSlotsData(targetRackId);
+    const existingPallet = currentSlots[selectedSlotForAction];
+    const isNew = !existingPallet;
 
-    // 2. หักลบจำนวนในรายการด้านขวา ถ้าหมดให้ลบออกอัตโนมัติ
+    if (existingPallet) {
+      // เติมลงพาเลทเดิม
+      const newTotalQty = existingPallet.qty + qtyToStore;
+      if (newTotalQty > MAX_PALLET_CAPACITY) {
+        alert(`ความจุเกิน! พาเลทนี้จุได้สูงสุด ${MAX_PALLET_CAPACITY} ชิ้น (ปัจจุบันมี ${existingPallet.qty} เติมได้อีก ${MAX_PALLET_CAPACITY - existingPallet.qty} ชิ้นเท่านั้น ส่วนที่เกินต้องแยกไปขึ้นพาเลทใหม่ใน Slot ว่างอื่น)`);
+        return;
+      }
+      currentSlots[selectedSlotForAction] = {
+        ...existingPallet,
+        qty: newTotalQty
+      };
+    } else {
+      // เปิดพาเลทใหม่ใน Slot ว่างนี้
+      if (qtyToStore > MAX_PALLET_CAPACITY) {
+        alert(`ความจุพาเลทสูงสุดคือ ${MAX_PALLET_CAPACITY} ชิ้นต่อพาเลท`);
+        return;
+      }
+      currentSlots[selectedSlotForAction] = {
+        name: selectedItemToStore.name,
+        qty: qtyToStore,
+        itemId: selectedItemToStore.id
+      };
+    }
+
+    // อัปเดต State Rack Storage
+    setRackStorage(prev => ({
+      ...prev,
+      [targetRackId]: currentSlots
+    }));
+
+    // บันทึกประวัติการจัดเก็บ (Activity Log)
+    const newLog = {
+      id: Date.now(),
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+      itemName: selectedItemToStore.name,
+      qty: qtyToStore,
+      rackId: targetRackId,
+      slotName: selectedSlotForAction,
+      isNewPallet: isNew
+    };
+    setStorageLogs(prev => [newLog, ...prev]);
+
+    // หักลบจำนวนสินค้าคงเหลือในรายการฝั่งขวา
     setRemainingItems(prev => {
       return prev.map(item => {
         if (item.id === selectedItemToStore.id) {
@@ -104,10 +176,10 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
       }).filter(item => item.qty > 0);
     });
 
-    // Reset ค่า
-    setIsModalOpen(false);
+    // Reset ค่าใน Modal
+    setSelectedSlotForAction(null);
     setSelectedItemToStore(null);
-    setTargetRackId(null);
+    setIsModalOpen(false);
   };
 
   const handleApproveAll = () => {
@@ -117,6 +189,7 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
   };
 
   const isAllStored = remainingItems.length === 0;
+  const currentSlotsData = getRackSlotsData(targetRackId);
 
   return (
     <div className="p-6 bg-slate-900 min-h-screen font-sans flex gap-6">
@@ -178,7 +251,6 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
 
           {/* Dynamic View Mode */}
           {viewMode === 'list' ? (
-            // ================= VIEW 1: PLANNER TERMINAL (RECEIPT LIST) =================
             <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 min-h-[520px]">
               <div className="flex justify-between items-center mb-6">
                 <h3 className="text-lg font-black text-slate-900 tracking-wider">PLANNER TERMINAL</h3>
@@ -214,71 +286,100 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
               </div>
             </div>
           ) : (
-            // ================= VIEW 2: 3D MODEL & RECEIPT ITEMS PANEL =================
             <div className="flex gap-6 relative">
               
-              {/* Left 3D Warehouse Overview Mockup */}
-              <div className="flex-1 bg-white rounded-2xl p-6 shadow-sm border border-slate-200 flex flex-col justify-between">
-                <div className="flex justify-between items-center mb-4">
-                  <div className="flex items-center gap-2">
-                    <span className="w-3 h-3 bg-indigo-600 rounded-full inline-block"></span>
-                    <h3 className="font-bold text-slate-800 text-sm">3D WAREHOUSE MODEL (Click slot/rack to place item)</h3>
+              {/* Left 3D Warehouse Overview Mockup & Activity Log */}
+              <div className="flex-1 flex flex-col gap-6">
+                
+                {/* 3D Warehouse Model Card */}
+                <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
+                  <div className="flex justify-between items-center mb-4">
+                    <div className="flex items-center gap-2">
+                      <span className="w-3 h-3 bg-indigo-600 rounded-full inline-block"></span>
+                      <h3 className="font-bold text-slate-800 text-sm">3D WAREHOUSE MODEL (Click rack to inspect 9 slots)</h3>
+                    </div>
+                    <button
+                      onClick={() => setViewMode('list')}
+                      className="bg-slate-900 text-white text-xs px-4 py-2 rounded-xl font-bold hover:bg-slate-800 transition cursor-pointer flex items-center gap-1.5"
+                    >
+                      <ArrowLeft size={14} /> Back to List
+                    </button>
                   </div>
-                  <button
-                    onClick={() => setViewMode('list')}
-                    className="bg-slate-900 text-white text-xs px-4 py-2 rounded-xl font-bold hover:bg-slate-800 transition cursor-pointer flex items-center gap-1.5"
-                  >
-                    <ArrowLeft size={14} /> Back to List
-                  </button>
-                </div>
 
-                {/* 3D Visual Box Area */}
-                <div className="bg-slate-900 rounded-2xl h-[400px] relative p-6 flex flex-wrap gap-4 items-center justify-center border border-slate-800 shadow-inner overflow-hidden">
-                  <div className="absolute inset-0 bg-[radial-gradient(#334155_1px,transparent_1px)] [background-size:16px_16px] opacity-40"></div>
-                  
-                  {racks.map((rack) => {
-                    const rackStoredItems = rackStorage[rack.id] || [];
-                    const isHasItems = rackStoredItems.length > 0;
+                  <div className="bg-slate-900 rounded-2xl h-[360px] relative p-6 flex flex-wrap gap-4 items-center justify-center border border-slate-800 shadow-inner overflow-hidden">
+                    <div className="absolute inset-0 bg-[radial-gradient(#334155_1px,transparent_1px)] [background-size:16px_16px] opacity-40"></div>
+                    
+                    {racks.map((rack) => {
+                      const rackSlotsData = rackStorage[rack.id] || {};
+                      const filledSlotsCount = Object.values(rackSlotsData).filter(Boolean).length;
 
-                    return (
-                      <div
-                        key={rack.id}
-                        onClick={() => handleRackClick(rack.id)}
-                        className={`w-[45%] h-[40%] rounded-2xl border-2 p-4 flex flex-col justify-between transition cursor-pointer relative z-10 shadow-lg ${
-                          selectedItemToStore 
-                            ? 'border-indigo-400 bg-slate-800 hover:bg-indigo-950/50 ring-2 ring-indigo-500/50 animate-pulse' 
-                            : isHasItems 
-                            ? 'border-blue-500 bg-blue-950/60 hover:border-blue-400' 
-                            : 'border-slate-700 bg-slate-800/80 hover:border-slate-500'
-                        }`}
-                      >
-                        <div className="flex justify-between items-center">
-                          <span className="text-xs font-bold text-white bg-slate-900 px-3 py-1 rounded-lg border border-slate-700">{rack.name}</span>
-                          <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${isHasItems ? 'bg-emerald-500 text-white' : 'bg-slate-700 text-slate-300'}`}>
-                            {isHasItems ? `${rackStoredItems.length} entries` : 'Available'}
-                          </span>
-                        </div>
-                        <div className="overflow-y-auto max-h-[75px] pr-1 space-y-1">
-                          {isHasItems ? (
-                            rackStoredItems.map((st, i) => (
-                              <div key={i} className="flex justify-between text-[10px] text-slate-200 bg-slate-900/80 px-2 py-1 rounded border border-slate-700">
-                                <div>
-                                  <span className="text-indigo-300 font-bold block">{st.slot}</span>
-                                  <span className="text-slate-300">{st.name}</span>
-                                </div>
-                                <span className="text-emerald-400 font-bold self-center">x{st.qty}</span>
-                              </div>
-                            ))
-                          ) : (
-                            <p className="text-xs text-slate-400 italic text-center mt-3">
-                              {selectedItemToStore ? '👉 Click here to store selected item' : 'Click rack to assign'}
+                      return (
+                        <div
+                          key={rack.id}
+                          onClick={() => handleRackClick(rack.id)}
+                          className={`w-[45%] h-[40%] rounded-2xl border-2 p-4 flex flex-col justify-between transition cursor-pointer relative z-10 shadow-lg ${
+                            selectedItemToStore 
+                              ? 'border-indigo-400 bg-slate-800 hover:bg-indigo-950/50 ring-2 ring-indigo-500/50 animate-pulse' 
+                              : filledSlotsCount > 0 
+                              ? 'border-blue-500 bg-blue-950/60 hover:border-blue-400' 
+                              : 'border-slate-700 bg-slate-800/80 hover:border-slate-500'
+                          }`}
+                        >
+                          <div className="flex justify-between items-center">
+                            <span className="text-xs font-bold text-white bg-slate-900 px-3 py-1 rounded-lg border border-slate-700">{rack.name}</span>
+                            <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${filledSlotsCount > 0 ? 'bg-emerald-500 text-white' : 'bg-slate-700 text-slate-300'}`}>
+                              {filledSlotsCount > 0 ? `${filledSlotsCount}/9 Slots Used` : 'All Empty (9 Slots)'}
+                            </span>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-xs text-slate-300 font-semibold flex items-center justify-center gap-1">
+                              <Layers size={14} className="text-indigo-400" /> Click to inspect 9 slots
                             </p>
-                          )}
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
+
+                {/* Storage Activity Log (New Section) */}
+                <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
+                  <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-100">
+                    <div className="flex items-center gap-2">
+                      <History className="w-4 h-4 text-indigo-600" />
+                      <h3 className="font-black text-slate-800 text-xs tracking-wider uppercase">Storage Activity Log (ประวัติการจัดเก็บในรอบนี้)</h3>
+                    </div>
+                    <span className="text-[11px] text-slate-400 font-medium">Total Actions: {storageLogs.length}</span>
+                  </div>
+
+                  <div className="space-y-2 max-h-[160px] overflow-y-auto pr-1">
+                    {storageLogs.length === 0 ? (
+                      <div className="text-center py-5 text-slate-400 text-xs italic bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                        ยังไม่มีประวัติการจัดเก็บ — เลือกสินค้าและระบุ Slot เพื่อเริ่มบันทึก
+                      </div>
+                    ) : (
+                      storageLogs.map((log) => (
+                        <div key={log.id} className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 flex items-center justify-between text-xs shadow-xs">
+                          <div className="flex items-center gap-2.5">
+                            <span className={`w-2 h-2 rounded-full ${log.isNewPallet ? 'bg-emerald-500' : 'bg-blue-500'}`}></span>
+                            <p className="text-slate-800">
+                              จัดเก็บ <strong className="text-indigo-600">{log.itemName}</strong> จำนวน <strong className="text-slate-900">{log.qty} ชิ้น</strong> ไปที่ <strong className="text-slate-900">{log.rackId} ({log.slotName})</strong>
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-3 shrink-0">
+                            <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${log.isNewPallet ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>
+                              {log.isNewPallet ? '✨ พาเลทใหม่' : '🔄 เติมพาเลทเดิม'}
+                            </span>
+                            <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                              <Clock size={10} /> {log.time}
+                            </span>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
               </div>
 
               {/* Right Receipt Items Panel */}
@@ -292,9 +393,9 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
                     </div>
                   </div>
 
-                  <p className="text-[11px] text-slate-400 mb-3">คลิกเลือกสินค้า (จะกระพริบ) แล้วไปคลิก Rack ฝั่งซ้าย:</p>
+                  <p className="text-[11px] text-slate-400 mb-3">คลิกเลือกสินค้า แล้วคลิก Rack เพื่อเช็ค 9 Slot:</p>
 
-                  <div className="space-y-3 max-h-[280px] overflow-y-auto pr-1">
+                  <div className="space-y-3 max-h-[380px] overflow-y-auto pr-1">
                     {remainingItems.length === 0 ? (
                       <div className="text-center py-8 text-emerald-600 font-bold text-xs bg-emerald-50 rounded-2xl border border-emerald-200">
                         ✨ จัดเก็บสินค้าครบทุกชิ้นแล้ว!
@@ -327,7 +428,6 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
                   </div>
                 </div>
 
-                {/* Bottom Action Area */}
                 <div className="pt-4 border-t border-slate-100 mt-4 flex flex-col gap-3">
                   <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 text-center">
                     <p className="text-[11px] text-slate-600 font-medium">
@@ -356,56 +456,121 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
 
       </div>
 
-      {/* ================= 3. POPUP MODAL FOR SLOT & QTY ================= */}
+      {/* ================= 3. POPUP MODAL INSPECTING 9 SLOTS ================= */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center">
-          <div className="bg-white rounded-3xl p-6 w-[400px] shadow-2xl border border-slate-200 animate-scale-up">
-            <h3 className="font-black text-slate-800 text-base mb-1">ระบุ Slot และจำนวนจัดเก็บ</h3>
-            <p className="text-xs text-slate-500 mb-4">
-              สินค้า: <b className="text-slate-800">{selectedItemToStore?.name}</b> (เหลือ {selectedItemToStore?.qty} ชิ้น)
-            </p>
-
-            {/* Dropdown เลือก Slot */}
-            <div className="mb-4">
-              <label className="block text-xs font-bold text-slate-700 mb-1.5">เลือก Slot ชั้นวาง:</label>
-              <select
-                value={selectedSlot}
-                onChange={(e) => setSelectedSlot(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-800 focus:outline-none focus:border-indigo-500 cursor-pointer"
-              >
-                {slotOptions.map((slot, index) => (
-                  <option key={index} value={slot}>{slot}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* ช่องกรอกจำนวน */}
-            <div className="mb-6">
-              <label className="block text-xs font-bold text-slate-700 mb-1.5">จำนวนชิ้น (Quantity):</label>
-              <input
-                type="number"
-                min="1"
-                max={selectedItemToStore?.qty}
-                value={inputQty}
-                onChange={(e) => setInputQty(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-800 focus:outline-none focus:border-indigo-500"
-              />
-            </div>
-
-            <div className="flex gap-3">
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 w-[650px] shadow-2xl border border-slate-200 animate-scale-up max-h-[90vh] flex flex-col">
+            
+            <div className="flex justify-between items-start mb-3 pb-3 border-b border-slate-100">
+              <div>
+                <h3 className="font-black text-slate-800 text-base">
+                  ตรวจสอบ 9 Slot ของ Rack: <span className="text-indigo-600">{targetRackId}</span>
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  กำลังจัดเก็บสินค้า: <b className="text-slate-800">{selectedItemToStore?.name}</b> (ต้องจัดเก็บอีก {selectedItemToStore?.qty} ชิ้น) | ความจุสูงสุดต่อพาเลท: {MAX_PALLET_CAPACITY} ชิ้น
+                </p>
+              </div>
               <button
                 onClick={() => setIsModalOpen(false)}
-                className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-2.5 rounded-xl text-xs transition cursor-pointer"
+                className="text-slate-400 hover:text-slate-600 text-sm font-bold cursor-pointer px-2 py-1"
               >
-                ยกเลิก
-              </button>
-              <button
-                onClick={confirmStoreItem}
-                className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-xl text-xs transition shadow-md cursor-pointer"
-              >
-                ยืนยันจัดเก็บ
+                ✕
               </button>
             </div>
+
+            {/* Grid 9 Slots ของ Rack */}
+            <div className="grid grid-cols-3 gap-3 my-4 overflow-y-auto pr-1">
+              {rackSlots.map((slotName) => {
+                const pallet = currentSlotsData[slotName];
+                const isOccupied = pallet !== null;
+                const isSelectedThisSlot = selectedSlotForAction === slotName;
+                const isFull = isOccupied && pallet.qty >= MAX_PALLET_CAPACITY;
+
+                return (
+                  <div
+                    key={slotName}
+                    onClick={() => !isFull && handleSelectSlotInModal(slotName, pallet)}
+                    className={`border-2 rounded-2xl p-3.5 transition flex flex-col justify-between ${
+                      isFull 
+                        ? 'bg-slate-100 border-slate-300 opacity-60 cursor-not-allowed'
+                        : isSelectedThisSlot 
+                        ? 'border-indigo-600 bg-indigo-50/80 ring-2 ring-indigo-400 shadow-md cursor-pointer' 
+                        : isOccupied 
+                        ? 'border-blue-300 bg-blue-50/40 hover:border-blue-400 cursor-pointer' 
+                        : 'border-slate-200 bg-slate-50 hover:border-indigo-400 cursor-pointer'
+                    }`}
+                  >
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="font-bold text-xs text-slate-800">{slotName}</span>
+                      <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${
+                        isFull ? 'bg-slate-400 text-white' : isOccupied ? 'bg-blue-600 text-white' : 'bg-emerald-500 text-white'
+                      }`}>
+                        {isFull ? 'พาเลทเต็ม' : isOccupied ? 'มีพาเลทเดิม' : 'Slot ว่าง (พาเลทใหม่)'}
+                      </span>
+                    </div>
+
+                    <div className="text-xs min-h-[45px] flex flex-col justify-center">
+                      {isOccupied ? (
+                        <>
+                          <p className="font-bold text-slate-800 truncate">{pallet.name}</p>
+                          <p className="text-[11px] text-slate-500 mt-0.5">
+                            จำนวน: <b className="text-indigo-600">{pallet.qty}</b> / {MAX_PALLET_CAPACITY} ชิ้น
+                          </p>
+                        </>
+                      ) : (
+                        <p className="text-slate-400 italic text-center text-[11px]">ว่าง — คลิกเพื่อตั้งพาเลทใหม่</p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* ส่วนระบุจำนวนเมื่อคลิกเลือก Slot แล้ว */}
+            {selectedSlotForAction && (
+              <div className="bg-slate-50 border border-indigo-200 rounded-2xl p-4 mt-2 animate-fade-in">
+                <div className="flex justify-between items-center mb-2">
+                  <p className="text-xs font-bold text-slate-800">
+                    จัดการ Slot: <span className="text-indigo-600">{selectedSlotForAction}</span> ({currentSlotsData[selectedSlotForAction] ? 'เติมพาเลทเดิม' : 'สร้างพาเลทใหม่'})
+                  </p>
+                  <span className="text-[11px] text-slate-500">
+                    {currentSlotsData[selectedSlotForAction] 
+                      ? `เติมได้อีกสูงสุด: ${MAX_PALLET_CAPACITY - currentSlotsData[selectedSlotForAction].qty} ชิ้น` 
+                      : `จุได้สูงสุด: ${MAX_PALLET_CAPACITY} ชิ้น`}
+                  </span>
+                </div>
+
+                <div className="flex gap-3 items-center">
+                  <div className="flex-1">
+                    <label className="block text-[10px] font-bold text-slate-500 mb-1">ระบุจำนวนที่จะจัดเก็บใส่ Slot นี้:</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max={selectedItemToStore?.qty}
+                      value={inputQty}
+                      onChange={(e) => setInputQty(e.target.value)}
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                  <button
+                    onClick={confirmStoreToSlot}
+                    className="mt-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-6 py-2 rounded-xl text-xs transition shadow cursor-pointer"
+                  >
+                    ยืนยันการจัดเก็บ
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="mt-4 pt-3 border-t border-slate-100 flex justify-end">
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-5 py-2.5 rounded-xl text-xs transition cursor-pointer"
+              >
+                ปิดหน้าต่าง
+              </button>
+            </div>
+
           </div>
         </div>
       )}
