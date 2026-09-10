@@ -4,6 +4,7 @@ import VendorTerminal from './VendorTerminal';
 import ReceptionTerminal from './ReceptionTerminal';
 import AdminDashboard from './AdminDashboard';
 import PlannerTerminal from './PlannerTerminal';
+import StaffTerminal from './StaffTerminal';
 
 const TerminalPlaceholder = ({ title, roleName, onBack }) => (
   <div className="min-h-screen bg-[#0b0f19] text-white flex flex-col items-center justify-center p-6 text-center">
@@ -75,10 +76,10 @@ export default function App() {
       )}
 
       {currentView === 'staff' && (
-        <TerminalPlaceholder
-          title="STAFF TERMINAL"
-          roleName="Staff"
+        <StaffTerminal
+          currentUser={currentUser}
           onBack={() => setCurrentView('landing')}
+          onLogout={handleLogout}
         />
       )}
 
