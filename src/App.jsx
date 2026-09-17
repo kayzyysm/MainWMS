@@ -5,6 +5,7 @@ import ReceptionTerminal from './ReceptionTerminal';
 import AdminDashboard from './AdminDashboard';
 import PlannerTerminal from './PlannerTerminal';
 import StaffTerminal from './StaffTerminal';
+import StorefrontOutboundTerminal from './OutboundStorefront';
 
 const TerminalPlaceholder = ({ title, roleName, onBack }) => (
   <div className="min-h-screen bg-[#0b0f19] text-white flex flex-col items-center justify-center p-6 text-center">
@@ -90,12 +91,12 @@ export default function App() {
           onLogout={handleLogout}
         />
       )}
-
+      
       {currentView === 'outbound' && (
-        <TerminalPlaceholder
-          title="OUTBOUND DASHBOARD"
-          roleName="User / Outbound"
+        <StorefrontOutboundTerminal
+          currentUser={currentUser}
           onBack={() => setCurrentView('landing')}
+          onLogout={handleLogout}
         />
       )}
     </div>
