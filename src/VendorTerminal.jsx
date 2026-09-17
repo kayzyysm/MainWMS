@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Bell, Plus, ChevronUp, ArrowLeft, Printer, CheckCircle } from 'lucide-react';
+import { Bell, Plus, ChevronUp, ArrowLeft, Printer, CheckCircle, Tag } from 'lucide-react';
 
 export default function VendorTerminal({ currentUser, onBack, onLogout }) {
   const [currentView, setCurrentView] = useState('list');
@@ -11,10 +11,30 @@ export default function VendorTerminal({ currentUser, onBack, onLogout }) {
   const [itemList, setItemList] = useState([]);
 
   const [activeReceipt, setActiveReceipt] = useState(null);
+  const [labelMode, setLabelMode] = useState('unit'); // 'unit' = พิมพ์สติ๊กเกอร์แยกชิ้น, 'batch' = พิมพ์สติ๊กเกอร์รวมรายการ
 
   const [receipts, setReceipts] = useState([
-    { id: 'RECEIPT 1', docNo: 'WH-INV-761561', date: '8/5/2569', quantity: 4, status: 'Pending', items: [] },
-    { id: 'RECEIPT 3', docNo: 'WH-INV-761562', date: '8/5/2569', quantity: 2, status: 'Confirmed', items: [] },
+    { 
+      id: 'RECEIPT 1', 
+      docNo: 'WH-INV-761561', 
+      date: '8/5/2569', 
+      quantity: 4, 
+      status: 'Pending', 
+      items: [
+        { id: 'PRD-001', productName: 'Keyboard RGB', quantity: 2, weight: 0.8, totalWeight: '1.60' },
+        { id: 'PRD-002', productName: 'Laptop Stand', quantity: 2, weight: 1.2, totalWeight: '2.40' }
+      ] 
+    },
+    { 
+      id: 'RECEIPT 3', 
+      docNo: 'WH-INV-761562', 
+      date: '8/5/2569', 
+      quantity: 2, 
+      status: 'Confirmed', 
+      items: [
+        { id: 'PRD-003', productName: 'Webcam 1080p', quantity: 2, weight: 0.3, totalWeight: '0.60' }
+      ] 
+    },
   ]);
 
   const productOptions = [
@@ -37,7 +57,7 @@ export default function VendorTerminal({ currentUser, onBack, onLogout }) {
     const totalWeightVal = (qtyNum * unitWeight).toFixed(2);
 
     const newItem = {
-      id: selectedProduct ? selectedProduct.id : 'INB-' + Math.floor(10000000 + Math.random() * 90000000),
+      id: selectedProduct ? selectedProduct.id : 'INB-' + Math.floor(1000 + Math.random() * 9000),
       productName: selectedProduct ? selectedProduct.name : searchTerm,
       quantity: qtyNum,
       weight: unitWeight,
@@ -73,15 +93,48 @@ export default function VendorTerminal({ currentUser, onBack, onLogout }) {
     setItemList([]);
   };
 
+  // สร้างรายการสติ๊กเกอร์ QR Code รายชิ้นสำหรับหน้าที่ 2
+  const generateStickers = () => {
+    if (!activeReceipt || !activeReceipt.items) return [];
+
+    if (labelMode === 'batch') {
+      // โหมดสติ๊กเกอร์สรุปตามรายการสินค้า (1 สติ๊กเกอร์ / 1 SKU)
+      return activeReceipt.items.map((item) => ({
+        stickerId: `${activeReceipt.docNo}-${item.id}`,
+        productName: item.productName,
+        sku: item.id,
+        unitText: `QTY: ${item.quantity} UNITS`,
+        docNo: activeReceipt.docNo,
+        date: activeReceipt.date
+      }));
+    }
+
+    // โหมดกระจายสติ๊กเกอร์รายชิ้น (1 สติ๊กเกอร์ / 1 ชิ้น)
+    const stickers = [];
+    activeReceipt.items.forEach((item) => {
+      for (let i = 1; i <= item.quantity; i++) {
+        stickers.push({
+          stickerId: `${activeReceipt.docNo}-${item.id}-${i}`,
+          productName: item.productName,
+          sku: item.id,
+          unitText: `UNIT ${i} OF ${item.quantity}`,
+          docNo: activeReceipt.docNo,
+          date: activeReceipt.date
+        });
+      }
+    });
+    return stickers;
+  };
+
   return (
     <div className="flex h-screen w-full bg-[#f8f9fa] overflow-hidden font-sans">
 
-      {/* CSS ตัด Margin ของหน้ากระดาษเพื่อซ่อน Header/Footer ของ Browser และบังคับพิมพ์สี */}
+      {/* CSS พิมพ์ 2 หน้า โดยใช้ break-before สำหรับหน้าที่ 2 */}
       <style dangerouslySetInnerHTML={{__html: `
         @media print {
           @page {
             margin: 0;
-            size: auto;
+            size: A4 portrait;
           }
           body * {
             visibility: hidden;
@@ -94,15 +147,18 @@ export default function VendorTerminal({ currentUser, onBack, onLogout }) {
             left: 0;
             top: 0;
             width: 100%;
-            min-height: 100vh;
             margin: 0;
-            padding: 15mm;
-            box-sizing: border-box;
+            padding: 0;
             box-shadow: none !important;
             border: none !important;
             border-radius: 0 !important;
+            background: #ffffff !important;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
+          }
+          .print-page-break {
+            break-before: page !important;
+            page-break-before: always !important;
           }
         }
       `}} />
@@ -312,94 +368,179 @@ export default function VendorTerminal({ currentUser, onBack, onLogout }) {
             </div>
           )}
 
-          {/* VIEW 3: PDF RECEIPT PREVIEW */}
+          {/* VIEW 3: PDF RECEIPT PREVIEW (PAGE 1 & PAGE 2) */}
           {currentView === 'preview' && activeReceipt && (
             <div className="w-full">
-              {/* ปุ่มควบคุม (ซ่อนตอนปริ้นท์) */}
-              <div className="flex justify-between items-center mb-6 print:hidden">
+              {/* แผงควบคุมก่อนพิมพ์ (ซ่อนตอนปริ้นท์) */}
+              <div className="flex justify-between items-center mb-6 print:hidden bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
                 <button
                   onClick={() => setCurrentView('list')}
                   className="text-xs text-slate-500 hover:text-slate-800 font-bold flex items-center gap-1.5 cursor-pointer"
                 >
                   <ArrowLeft className="w-4 h-4" /> Back to receipts
                 </button>
-                <button
-                  onClick={() => window.print()}
-                  className="bg-[#2563eb] hover:bg-[#1d4ed8] text-white px-5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 shadow-md cursor-pointer"
-                >
-                  <Printer className="w-4 h-4" /> Print / Save PDF
-                </button>
+
+                <div className="flex items-center gap-4">
+                  {/* ปุ่มสลับโหมดสติ๊กเกอร์ หน้า 2 */}
+                  <div className="flex items-center bg-slate-100 p-1 rounded-xl gap-1">
+                    <button
+                      onClick={() => setLabelMode('unit')}
+                      className={`text-[11px] px-3 py-1.5 rounded-lg font-bold transition ${labelMode === 'unit' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500'}`}
+                    >
+                      สติ๊กเกอร์แยกชิ้น ({activeReceipt.quantity} ใบ)
+                    </button>
+                    <button
+                      onClick={() => setLabelMode('batch')}
+                      className={`text-[11px] px-3 py-1.5 rounded-lg font-bold transition ${labelMode === 'batch' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500'}`}
+                    >
+                      สติ๊กเกอร์สรุปชนิด ({activeReceipt.items?.length || 1} ใบ)
+                    </button>
+                  </div>
+
+                  <button
+                    onClick={() => window.print()}
+                    className="bg-[#2563eb] hover:bg-[#1d4ed8] text-white px-5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-md cursor-pointer"
+                  >
+                    <Printer className="w-4 h-4" /> Print 2 Pages (PDF)
+                  </button>
+                </div>
               </div>
 
-              {/* กล่องใบเสร็จ */}
-              <div id="printable-receipt" className="bg-white rounded-3xl shadow-xl border border-slate-200/90 p-10 text-slate-800 relative w-full min-h-[850px] flex flex-col justify-between" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
-                
-                <div>
-                  {/* ส่วนหัวใบเสร็จ สีน้ำเงินกรมท่า (#161d2f) */}
-                  <div className="bg-[#161d2f] text-white -mx-10 -mt-10 p-10 mb-8 flex justify-between items-start rounded-t-3xl" style={{ backgroundColor: '#161d2f', color: '#ffffff', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
-                    <div>
-                      <h1 className="text-2xl font-bold tracking-wider">WMS AUTOMATION SYSTEM</h1>
-                      <p className="text-xs text-slate-400 uppercase tracking-widest mt-1">INBOUND SHIPMENT RECEIPT</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-xs font-mono">Document No: {activeReceipt.docNo}</p>
-                      <p className="text-xs font-mono mt-1">Date: {activeReceipt.date}</p>
-                      {/* QR Code */}
-                      <div className="mt-3 bg-white p-1.5 rounded-lg inline-block shadow-sm">
-                        <img
-                          src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(activeReceipt.docNo)}`}
-                          alt="QR Code Document No"
-                          className="w-14 h-14 object-contain"
-                        />
+              {/* ---------------- CONTAINER สำหรับพิมพ์ทั้ง 2 หน้า ---------------- */}
+              <div id="printable-receipt" className="space-y-8">
+
+                {/* ==================== PAGE 1: ใบเสร็จปกติ ==================== */}
+                <div className="bg-white rounded-3xl shadow-xl border border-slate-200/90 p-10 text-slate-800 relative w-full min-h-[980px] flex flex-col justify-between">
+                  <div>
+                    {/* Header ใบเสร็จ */}
+                    <div className="bg-[#161d2f] text-white -mx-10 -mt-10 p-10 mb-8 flex justify-between items-start rounded-t-3xl" style={{ backgroundColor: '#161d2f', color: '#ffffff' }}>
+                      <div>
+                        <h1 className="text-2xl font-bold tracking-wider">WMS AUTOMATION SYSTEM</h1>
+                        <p className="text-xs text-slate-400 uppercase tracking-widest mt-1">INBOUND SHIPMENT RECEIPT (PAGE 1/2)</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs font-mono">Doc No: {activeReceipt.docNo}</p>
+                        <p className="text-xs font-mono mt-1">Date: {activeReceipt.date}</p>
+                        <div className="mt-3 bg-white p-1.5 rounded-lg inline-block shadow-sm">
+                          <img
+                            src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(activeReceipt.docNo)}`}
+                            alt="QR Code Doc No"
+                            className="w-14 h-14 object-contain"
+                          />
+                        </div>
                       </div>
                     </div>
+
+                    {/* ตารางสินค้า */}
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50 text-xs font-bold text-slate-600 border-b border-slate-200">
+                          <th className="py-4 px-6">รายการสินค้า</th>
+                          <th className="py-4 px-6">รหัสสินค้า (SKU)</th>
+                          <th className="py-4 px-6">จำนวน</th>
+                          <th className="py-4 px-6 text-right">น้ำหนักรวม (KG)</th>
+                        </tr>
+                      </thead>
+                      <tbody className="text-sm text-slate-700">
+                        {activeReceipt.items && activeReceipt.items.length > 0 ? (
+                          activeReceipt.items.map((it, i) => (
+                            <tr key={i} className="border-b border-slate-100">
+                              <td className="py-4 px-6 font-semibold">{it.productName}</td>
+                              <td className="py-4 px-6 font-mono text-slate-500">{it.id}</td>
+                              <td className="py-4 px-6 font-bold text-slate-800">{it.quantity}</td>
+                              <td className="py-4 px-6 text-right">{it.totalWeight}</td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr className="border-b border-slate-100">
+                            <td className="py-4 px-6 font-semibold">Keyboard RGB</td>
+                            <td className="py-4 px-6 font-mono text-slate-500">PRD-001</td>
+                            <td className="py-4 px-6 font-bold">{activeReceipt.quantity}</td>
+                            <td className="py-4 px-6 text-right">2.40</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
                   </div>
 
-                  {/* ตารางรายการสินค้า */}
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="bg-slate-50 text-xs font-bold text-slate-600 border-b border-slate-200">
-                        <th className="py-4 px-6">รายการสินค้า</th>
-                        <th className="py-4 px-6">รหัสสินค้า (ID)</th>
-                        <th className="py-4 px-6">จำนวน</th>
-                        <th className="py-4 px-6 text-right">น้ำหนัก (KG)</th>
-                      </tr>
-                    </thead>
-                    <tbody className="text-sm text-slate-700">
-                      {activeReceipt.items && activeReceipt.items.length > 0 ? (
-                        activeReceipt.items.map((it, i) => (
-                          <tr key={i} className="border-b border-slate-100">
-                            <td className="py-4 px-6 font-semibold">{it.productName}</td>
-                            <td className="py-4 px-6 font-mono text-slate-500">{it.id}</td>
-                            <td className="py-4 px-6">{it.quantity}</td>
-                            <td className="py-4 px-6 text-right">{it.totalWeight}</td>
-                          </tr>
-                        ))
-                      ) : (
-                        <tr className="border-b border-slate-100">
-                          <td className="py-4 px-6 font-semibold">Keyboard RGB</td>
-                          <td className="py-4 px-6 font-mono text-slate-500">INB-1778183753347</td>
-                          <td className="py-4 px-6">{activeReceipt.quantity}</td>
-                          <td className="py-4 px-6 text-right">2.40</td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
+                  {/* ลายเซ็นท้ายใบเสร็จ */}
+                  <div className="mt-12">
+                    <div className="grid grid-cols-2 gap-16 text-sm mb-8">
+                      <div>
+                        <p className="text-slate-500">ผู้ส่งมอบสินค้า: .....................................................</p>
+                      </div>
+                      <div>
+                        <p className="text-slate-500">เจ้าหน้าที่รับคลัง: .....................................................</p>
+                      </div>
+                    </div>
+                    <div className="text-center pt-4 border-t border-slate-100">
+                      <p className="text-xs text-slate-400">หมายเหตุ: โปรดแนบสติ๊กเกอร์ QR ในหน้าที่ 2 ลงบนตัวสินค้าทุกชิ้นก่อนนำเข้าชั้นวาง</p>
+                    </div>
+                  </div>
                 </div>
 
-                {/* ส่วนท้าย (ลายเซ็นและหมายเหตุ ถูกดันมาอยู่ล่างสุดเสมอ) */}
-                <div className="mt-12">
-                  <div className="grid grid-cols-2 gap-16 text-sm mb-8">
-                    <div>
-                      <p className="text-slate-500">ผู้รับสินค้า: ............................................................................</p>
+                {/* ==================== PAGE 2: QR LABELS / STICKER SHEET ==================== */}
+                <div className="print-page-break bg-white rounded-3xl shadow-xl border border-slate-200/90 p-10 text-slate-800 relative w-full min-h-[980px] flex flex-col justify-between">
+                  <div>
+                    {/* Header หน้า 2 */}
+                    <div className="border-b-2 border-slate-900 pb-4 mb-6 flex justify-between items-center">
+                      <div>
+                        <h2 className="text-lg font-black tracking-wider flex items-center gap-2 text-slate-900">
+                          <Tag className="w-5 h-5 text-indigo-600" /> PRODUCT QR LABELS SHEET (PAGE 2/2)
+                        </h2>
+                        <p className="text-xs text-slate-500">สติ๊กเกอร์สำหรับติดสินค้า / กล่องรับเข้า [เอกสารอ้างอิง: {activeReceipt.docNo}]</p>
+                      </div>
+                      <span className="text-xs font-mono font-bold bg-slate-100 px-3 py-1 rounded-lg border border-slate-200">
+                        TOTAL STICKERS: {generateStickers().length} LABELS
+                      </span>
                     </div>
-                    <div>
-                      <p className="text-slate-500">เจ้าหน้าที่คลัง: ............................................................................</p>
+
+                    {/* ตารางไดคัทสติ๊กเกอร์ (3 Columns Grid) */}
+                    <div className="grid grid-cols-3 gap-4">
+                      {generateStickers().map((sticker, idx) => (
+                        <div
+                          key={idx}
+                          className="border-2 border-dashed border-slate-300 rounded-xl p-3 bg-slate-50/50 flex flex-col justify-between relative overflow-hidden"
+                          style={{ minHeight: '170px' }}
+                        >
+                          <div className="flex justify-between items-start gap-1">
+                            <div className="flex-1 min-w-0">
+                              <span className="text-[9px] font-bold bg-indigo-600 text-white px-1.5 py-0.5 rounded tracking-wider">
+                                {sticker.unitText}
+                              </span>
+                              <h3 className="font-bold text-xs text-slate-900 truncate mt-1">{sticker.productName}</h3>
+                              <p className="text-[10px] font-mono text-slate-500">SKU: {sticker.sku}</p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-200">
+                            {/* QR Code ประจำชิ้น */}
+                            <img
+                              src={`https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(sticker.stickerId)}`}
+                              alt={sticker.stickerId}
+                              className="w-16 h-16 object-contain bg-white p-1 rounded border border-slate-200"
+                            />
+                            
+                            <div className="text-right flex-1 pl-2">
+                              <p className="text-[9px] font-mono font-bold text-slate-800 break-all leading-tight">
+                                {sticker.stickerId}
+                              </p>
+                              <p className="text-[8px] text-slate-400 mt-1">DATE: {sticker.date}</p>
+                              <span className="text-[8px] text-emerald-700 bg-emerald-50 px-1 py-0.5 rounded font-bold border border-emerald-200 inline-block mt-1">
+                                INBOUND OK
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
 
-                  <div className="text-center pt-4 border-t border-slate-100">
-                    <p className="text-xs text-slate-400">หมายเหตุ: สินค้าถูกตรวจสอบเบื้องต้นแล้ว โปรดเก็บใบเสร็จนี้ไว้เพื่อการตรวจสอบสต็อก</p>
+                  {/* คำแนะนำสำหรับพนักงาน */}
+                  <div className="mt-8 pt-4 border-t border-slate-200 text-center">
+                    <p className="text-[11px] text-slate-400">
+                      ✂️ ลอกหรือตัดสติ๊กเกอร์ตามเส้นประ และติดลงบนกล่องบรรจุภัณฑ์สินค้าก่อนส่งให้พนักงาน Putaway
+                    </p>
                   </div>
                 </div>
 
