@@ -1,10 +1,13 @@
-import React, { useState, useEffect } from 'react';
-import { ChevronUp, Scan, Bell, CheckCircle, ArrowLeft, Layers, Package, Check } from 'lucide-react';
+import React, { useState } from 'react';
+import { ChevronUp, Scan, Bell, CheckCircle, ArrowLeft, Layers, Package, Check, Search } from 'lucide-react';
 
 export default function ReceptionTerminal({ currentUser, onLogout }) {
   const [viewMode, setViewMode] = useState('list');
   const [selectedReceipt, setSelectedReceipt] = useState(null);
   
+  // State สำหรับการค้นหาใบเสร็จแบบ Manual
+  const [searchQuery, setSearchQuery] = useState('');
+
   // State สำหรับเก็บสถานะการติ๊กของแต่ละชิ้นสินค้า (index ของ item)
   const [checkedItems, setCheckedItems] = useState({});
 
@@ -26,6 +29,14 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
     { id: '7', code: 'WH-INV-824523', qtyItems: 13, items: [{ name: 'PC Case ATX', qty: 8, weight: '5.20 KG' }] },
     { id: '8', code: 'WH-INV-832123', qtyItems: 13, items: [{ name: 'Wireless Mouse', qty: 40, weight: '0.30 KG' }] },
   ];
+
+  // กรองรายการใบเสร็จตามคำค้นหา (ค้นได้ทั้ง id และ code)
+  const filteredReceipts = receipts.filter(rec => {
+    const q = searchQuery.toLowerCase().trim();
+    const receiptName = `receipt ${rec.id}`.toLowerCase();
+    const codeName = rec.code.toLowerCase();
+    return receiptName.includes(q) || codeName.includes(q) || rec.id.includes(q);
+  });
 
   // เมื่อเลือกใบเสร็จ ให้รีเซ็ตค่าการติ๊กทั้งหมดเป็น false
   const handleSelectReceipt = (rec) => {
@@ -126,16 +137,36 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
           <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 min-h-[520px] flex flex-col justify-between">
             
             {viewMode === 'list' ? (
-              // ================= VIEW 1: RECEPTION TERMINAL (LIST) =================
+              // ================= VIEW 1: RECEPTION TERMINAL (LIST + MANUAL SEARCH) =================
               <div>
-                <div className="flex justify-between items-center mb-6">
-                  <h3 className="text-lg font-black text-slate-900 tracking-wider">RECEPTION TERMINAL</h3>
-                  <button
-                    onClick={handleScanClick}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-xl font-bold shadow-md transition transform hover:scale-105 cursor-pointer flex items-center gap-2"
-                  >
-                    <Scan size={18} /> SCAN
-                  </button>
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+                  <h3 className="text-lg font-black text-slate-900 tracking-wider shrink-0">RECEPTION TERMINAL</h3>
+                  
+                  {/* กล่องค้นหาด้วยเลขใบเสร็จ + ปุ่ม SCAN */}
+                  <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <div className="relative flex-1 sm:w-72">
+                      <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        placeholder="กรอกเลขใบเสร็จ e.g. WH-INV-561563"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && filteredReceipts.length > 0) {
+                            handleSelectReceipt(filteredReceipts[0]);
+                          }
+                        }}
+                        className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium focus:outline-none focus:border-indigo-600 focus:bg-white transition"
+                      />
+                    </div>
+
+                    <button
+                      onClick={handleScanClick}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-xl font-bold text-xs shadow-md transition transform hover:scale-105 cursor-pointer flex items-center gap-2 shrink-0"
+                    >
+                      <Scan size={16} /> SCAN
+                    </button>
+                  </div>
                 </div>
 
                 <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 mb-6 flex items-center gap-3 shadow-inner">
@@ -145,28 +176,35 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
                   <span className="text-sm font-semibold text-rose-500">Receipt Status</span>
                 </div>
 
+                {/* รายการใบเสร็จที่ผ่านการกรอง */}
                 <div className="space-y-3 max-h-[380px] overflow-y-auto pr-2">
-                  {receipts.map((rec) => (
-                    <div
-                      key={rec.id}
-                      className="bg-white border border-slate-200 rounded-2xl px-6 py-4 flex items-center justify-between shadow-sm hover:border-indigo-400 hover:shadow-md transition"
-                    >
-                      <div>
-                        <p className="font-bold text-slate-800 text-sm">
-                          RECEIPT {rec.id} <span className="text-slate-500 font-normal">[{rec.code}]</span>
-                        </p>
-                        <p className="text-[11px] text-slate-400 mt-0.5">
-                          Quantity : {rec.qtyItems} items
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => handleSelectReceipt(rec)}
-                        className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-5 py-2 rounded-xl transition cursor-pointer shadow"
+                  {filteredReceipts.length > 0 ? (
+                    filteredReceipts.map((rec) => (
+                      <div
+                        key={rec.id}
+                        className="bg-white border border-slate-200 rounded-2xl px-6 py-4 flex items-center justify-between shadow-sm hover:border-indigo-400 hover:shadow-md transition"
                       >
-                        Detail
-                      </button>
+                        <div>
+                          <p className="font-bold text-slate-800 text-sm">
+                            RECEIPT {rec.id} <span className="text-slate-500 font-normal">[{rec.code}]</span>
+                          </p>
+                          <p className="text-[11px] text-slate-400 mt-0.5">
+                            Quantity : {rec.qtyItems} items
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => handleSelectReceipt(rec)}
+                          className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-5 py-2 rounded-xl transition cursor-pointer shadow"
+                        >
+                          Detail
+                        </button>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-12 text-slate-400 text-xs">
+                      ไม่พบใบเสร็จที่ตรงกับคำค้นหา "{searchQuery}"
                     </div>
-                  ))}
+                  )}
                 </div>
               </div>
             ) : (
