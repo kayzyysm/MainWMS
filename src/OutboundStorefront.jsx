@@ -5,7 +5,6 @@ import {
   ChevronLeft, ChevronRight, QrCode, Store, Percent
 } from 'lucide-react';
 
-// รายการ Mock สินค้า (12 รายการ)
 const PRODUCTS = [
   { id: 'p1', name: 'Logitech G Pro X Superlight 2', category: 'Gadgets', price: 4590, originalPrice: 4990, image: 'https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?q=80&w=600&auto=format&fit=crop', isSale: true, isRecommended: true, description: 'เมาส์เกมมิ่งไร้สายน้ำหนักเบาพิเศษ เซนเซอร์ HERO 2' },
   { id: 'p2', name: 'Keychron K2 Wireless Mechanical Keyboard', category: 'Gadgets', price: 3890, originalPrice: 3890, image: 'https://images.unsplash.com/photo-1587829741301-dc798b83add3?q=80&w=600&auto=format&fit=crop', isSale: false, isRecommended: true, description: 'คีย์บอร์ดไร้สายสวิตช์มินิมอล รองรับ Mac & Windows' },

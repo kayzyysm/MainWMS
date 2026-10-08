@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Bell, Plus, ChevronUp, ArrowLeft, Printer, CheckCircle, Tag } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Bell, Plus, ChevronUp, ArrowLeft, Printer, CheckCircle, Tag, Minus } from 'lucide-react';
 
 export default function VendorTerminal({ currentUser, onBack, onLogout }) {
   const [currentView, setCurrentView] = useState('list');
@@ -11,7 +11,8 @@ export default function VendorTerminal({ currentUser, onBack, onLogout }) {
   const [itemList, setItemList] = useState([]);
 
   const [activeReceipt, setActiveReceipt] = useState(null);
-  const [labelMode, setLabelMode] = useState('unit'); // 'unit' = พิมพ์สติ๊กเกอร์แยกชิ้น, 'batch' = พิมพ์สติ๊กเกอร์รวมรายการ
+  // เก็บจำนวนสติ๊กเกอร์ที่จะพิมพ์แยกตาม ID สินค้า { [productId]: count }
+  const [stickerCounts, setStickerCounts] = useState({});
 
   const [receipts, setReceipts] = useState([
     { 
@@ -44,6 +45,17 @@ export default function VendorTerminal({ currentUser, onBack, onLogout }) {
     { id: 'PRD-004', name: 'Mouse Pad XL', weight: 0.5 },
     { id: 'PRD-005', name: 'Mouse Wireless', weight: 0.2 },
   ];
+
+  // อัปเดตจำนวนสติ๊กเกอร์เริ่มต้นเมื่อเปลี่ยนใบเสร็จที่เลือก
+  useEffect(() => {
+    if (activeReceipt && activeReceipt.items) {
+      const initialCounts = {};
+      activeReceipt.items.forEach(item => {
+        initialCounts[item.id] = item.quantity; // เริ่มต้นใช้จำนวนตามรายการรับเข้า
+      });
+      setStickerCounts(initialCounts);
+    }
+  }, [activeReceipt]);
 
   const filteredProducts = productOptions.filter(p =>
     p.name.toLowerCase().includes(searchTerm.toLowerCase())
@@ -93,31 +105,29 @@ export default function VendorTerminal({ currentUser, onBack, onLogout }) {
     setItemList([]);
   };
 
-  // สร้างรายการสติ๊กเกอร์ QR Code รายชิ้นสำหรับหน้าที่ 2
+  // ฟังก์ชันปรับจำนวนสติ๊กเกอร์ของแต่ละสินค้า
+  const handleStickerCountChange = (productId, newCount) => {
+    const val = Math.max(0, parseInt(newCount, 10) || 0);
+    setStickerCounts(prev => ({
+      ...prev,
+      [productId]: val
+    }));
+  };
+
+  // สร้างรายการสติ๊กเกอร์ QR Code ตามจำนวนที่ผู้ใช้ตั้งค่าไว้ในแต่ละชนิดสินค้า
   const generateStickers = () => {
     if (!activeReceipt || !activeReceipt.items) return [];
 
-    if (labelMode === 'batch') {
-      // โหมดสติ๊กเกอร์สรุปตามรายการสินค้า (1 สติ๊กเกอร์ / 1 SKU)
-      return activeReceipt.items.map((item) => ({
-        stickerId: `${activeReceipt.docNo}-${item.id}`,
-        productName: item.productName,
-        sku: item.id,
-        unitText: `QTY: ${item.quantity} UNITS`,
-        docNo: activeReceipt.docNo,
-        date: activeReceipt.date
-      }));
-    }
-
-    // โหมดกระจายสติ๊กเกอร์รายชิ้น (1 สติ๊กเกอร์ / 1 ชิ้น)
     const stickers = [];
     activeReceipt.items.forEach((item) => {
-      for (let i = 1; i <= item.quantity; i++) {
+      const count = stickerCounts[item.id] !== undefined ? stickerCounts[item.id] : item.quantity;
+      for (let i = 1; i <= count; i++) {
         stickers.push({
-          stickerId: `${activeReceipt.docNo}-${item.id}-${i}`,
+          stickerId: `${activeReceipt.docNo}-${item.id}`, // รหัส QR แบบเดียวกันสำหรับชนิดสินค้านี้
           productName: item.productName,
           sku: item.id,
-          unitText: `UNIT ${i} OF ${item.quantity}`,
+          labelIndex: i,
+          totalLabels: count,
           docNo: activeReceipt.docNo,
           date: activeReceipt.date
         });
@@ -129,7 +139,7 @@ export default function VendorTerminal({ currentUser, onBack, onLogout }) {
   return (
     <div className="flex h-screen w-full bg-[#f8f9fa] overflow-hidden font-sans">
 
-      {/* CSS พิมพ์ 2 หน้า โดยใช้ break-before สำหรับหน้าที่ 2 */}
+      {/* CSS สำหรับการพิมพ์ 2 หน้า */}
       <style dangerouslySetInnerHTML={{__html: `
         @media print {
           @page {
@@ -371,8 +381,8 @@ export default function VendorTerminal({ currentUser, onBack, onLogout }) {
           {/* VIEW 3: PDF RECEIPT PREVIEW (PAGE 1 & PAGE 2) */}
           {currentView === 'preview' && activeReceipt && (
             <div className="w-full">
-              {/* แผงควบคุมก่อนพิมพ์ (ซ่อนตอนปริ้นท์) */}
-              <div className="flex justify-between items-center mb-6 print:hidden bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+              {/* แผงควบคุมด้านบนก่อนพิมพ์ (ซ่อนตอนปริ้นท์) */}
+              <div className="flex justify-between items-center mb-4 print:hidden bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
                 <button
                   onClick={() => setCurrentView('list')}
                   className="text-xs text-slate-500 hover:text-slate-800 font-bold flex items-center gap-1.5 cursor-pointer"
@@ -380,29 +390,66 @@ export default function VendorTerminal({ currentUser, onBack, onLogout }) {
                   <ArrowLeft className="w-4 h-4" /> Back to receipts
                 </button>
 
-                <div className="flex items-center gap-4">
-                  {/* ปุ่มสลับโหมดสติ๊กเกอร์ หน้า 2 */}
-                  <div className="flex items-center bg-slate-100 p-1 rounded-xl gap-1">
-                    <button
-                      onClick={() => setLabelMode('unit')}
-                      className={`text-[11px] px-3 py-1.5 rounded-lg font-bold transition ${labelMode === 'unit' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500'}`}
-                    >
-                      สติ๊กเกอร์แยกชิ้น ({activeReceipt.quantity} ใบ)
-                    </button>
-                    <button
-                      onClick={() => setLabelMode('batch')}
-                      className={`text-[11px] px-3 py-1.5 rounded-lg font-bold transition ${labelMode === 'batch' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500'}`}
-                    >
-                      สติ๊กเกอร์สรุปชนิด ({activeReceipt.items?.length || 1} ใบ)
-                    </button>
-                  </div>
+                <button
+                  onClick={() => window.print()}
+                  className="bg-[#2563eb] hover:bg-[#1d4ed8] text-white px-6 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 shadow-md cursor-pointer transition active:scale-95"
+                >
+                  <Printer className="w-4 h-4" /> Print 2 Pages (PDF)
+                </button>
+              </div>
 
-                  <button
-                    onClick={() => window.print()}
-                    className="bg-[#2563eb] hover:bg-[#1d4ed8] text-white px-5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-md cursor-pointer"
-                  >
-                    <Printer className="w-4 h-4" /> Print 2 Pages (PDF)
-                  </button>
+              {/* แผงปรับจำนวนสติ๊กเกอร์แยกตามชนิดสินค้า (ซ่อนตอนปริ้นท์) */}
+              <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 mb-6 print:hidden">
+                <div className="flex justify-between items-center mb-4">
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                      <Tag className="w-4 h-4 text-[#2563eb]" />
+                      กำหนดจำนวนสติ๊กเกอร์ QR ที่ต้องการพิมพ์ (แยกตามชนิดสินค้า)
+                    </h4>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      สินค้าแต่ละชนิดจะใช้รูปแบบ QR Code เดียวกัน สามารถระบุจำนวนแผ่นสติ๊กเกอร์ที่ต้องการพิมพ์ของแต่ละรายการได้ที่นี่
+                    </p>
+                  </div>
+                  <span className="text-xs font-bold bg-indigo-50 text-indigo-700 px-3.5 py-1.5 rounded-xl border border-indigo-100 shrink-0">
+                    รวมพิมพ์ทั้งหมด: {generateStickers().length} ใบ
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {activeReceipt.items?.map((item) => {
+                    const currentCount = stickerCounts[item.id] !== undefined ? stickerCounts[item.id] : item.quantity;
+                    return (
+                      <div key={item.id} className="bg-slate-50/80 p-3.5 rounded-xl border border-slate-200 flex items-center justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-bold text-slate-800 truncate">{item.productName}</p>
+                          <p className="text-[10px] font-mono text-slate-500 mt-0.5">SKU: {item.id} (รับเข้า: {item.quantity} ชิ้น)</p>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0 bg-white p-1 rounded-lg border border-slate-200 shadow-sm">
+                          <button
+                            type="button"
+                            onClick={() => handleStickerCountChange(item.id, currentCount - 1)}
+                            className="w-7 h-7 bg-slate-100 hover:bg-slate-200 rounded-md flex items-center justify-center text-slate-700 transition cursor-pointer"
+                          >
+                            <Minus className="w-3.5 h-3.5" />
+                          </button>
+                          <input
+                            type="number"
+                            min="0"
+                            value={currentCount}
+                            onChange={(e) => handleStickerCountChange(item.id, e.target.value)}
+                            className="w-11 h-7 text-center text-xs font-bold text-slate-800 focus:outline-none"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleStickerCountChange(item.id, currentCount + 1)}
+                            className="w-7 h-7 bg-slate-100 hover:bg-slate-200 rounded-md flex items-center justify-center text-slate-700 transition cursor-pointer"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -474,7 +521,7 @@ export default function VendorTerminal({ currentUser, onBack, onLogout }) {
                       </div>
                     </div>
                     <div className="text-center pt-4 border-t border-slate-100">
-                      <p className="text-xs text-slate-400">หมายเหตุ: โปรดแนบสติ๊กเกอร์ QR ในหน้าที่ 2 ลงบนตัวสินค้าทุกชิ้นก่อนนำเข้าชั้นวาง</p>
+                      <p className="text-xs text-slate-400">หมายเหตุ: โปรดแนบสติ๊กเกอร์ QR ในหน้าที่ 2 ลงบนตัวสินค้า/กล่องสินค้าตามชนิดก่อนนำเข้าชั้นวาง</p>
                     </div>
                   </div>
                 </div>
@@ -488,7 +535,7 @@ export default function VendorTerminal({ currentUser, onBack, onLogout }) {
                         <h2 className="text-lg font-black tracking-wider flex items-center gap-2 text-slate-900">
                           <Tag className="w-5 h-5 text-indigo-600" /> PRODUCT QR LABELS SHEET (PAGE 2/2)
                         </h2>
-                        <p className="text-xs text-slate-500">สติ๊กเกอร์สำหรับติดสินค้า / กล่องรับเข้า [เอกสารอ้างอิง: {activeReceipt.docNo}]</p>
+                        <p className="text-xs text-slate-500">สติ๊กเกอร์สำหรับติดสินค้า / กล่องรับเข้าตามชนิด [เอกสารอ้างอิง: {activeReceipt.docNo}]</p>
                       </div>
                       <span className="text-xs font-mono font-bold bg-slate-100 px-3 py-1 rounded-lg border border-slate-200">
                         TOTAL STICKERS: {generateStickers().length} LABELS
@@ -506,7 +553,7 @@ export default function VendorTerminal({ currentUser, onBack, onLogout }) {
                           <div className="flex justify-between items-start gap-1">
                             <div className="flex-1 min-w-0">
                               <span className="text-[9px] font-bold bg-indigo-600 text-white px-1.5 py-0.5 rounded tracking-wider">
-                                {sticker.unitText}
+                                LABEL {sticker.labelIndex} / {sticker.totalLabels}
                               </span>
                               <h3 className="font-bold text-xs text-slate-900 truncate mt-1">{sticker.productName}</h3>
                               <p className="text-[10px] font-mono text-slate-500">SKU: {sticker.sku}</p>
@@ -514,7 +561,7 @@ export default function VendorTerminal({ currentUser, onBack, onLogout }) {
                           </div>
 
                           <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-200">
-                            {/* QR Code ประจำชิ้น */}
+                            {/* QR Code ประจำชนิดสินค้า */}
                             <img
                               src={`https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(sticker.stickerId)}`}
                               alt={sticker.stickerId}
@@ -539,7 +586,7 @@ export default function VendorTerminal({ currentUser, onBack, onLogout }) {
                   {/* คำแนะนำสำหรับพนักงาน */}
                   <div className="mt-8 pt-4 border-t border-slate-200 text-center">
                     <p className="text-[11px] text-slate-400">
-                      ✂️ ลอกหรือตัดสติ๊กเกอร์ตามเส้นประ และติดลงบนกล่องบรรจุภัณฑ์สินค้าก่อนส่งให้พนักงาน Putaway
+                      ✂️ ลอกหรือตัดสติ๊กเกอร์ตามเส้นประ และติดลงบนกล่องบรรจุภัณฑ์สินค้าตามชนิด ก่อนส่งให้พนักงาน Putaway
                     </p>
                   </div>
                 </div>
