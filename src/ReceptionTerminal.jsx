@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronUp, Scan, Bell, CheckCircle, ArrowLeft, Layers, Package, Check, Search } from 'lucide-react';
+import { ChevronUp, Scan, Bell, CheckCircle, ArrowLeft, Layers, Package, Check, Search, Building2, Barcode } from 'lucide-react';
 
 export default function ReceptionTerminal({ currentUser, onLogout }) {
   const [viewMode, setViewMode] = useState('list');
@@ -8,65 +8,78 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
   // State สำหรับการค้นหาใบเสร็จแบบ Manual
   const [searchQuery, setSearchQuery] = useState('');
 
-  // State สำหรับเก็บสถานะการติ๊กของแต่ละชิ้นสินค้า (index ของ item)
-  const [checkedItems, setCheckedItems] = useState({});
+  // State เก็บรายการสินค้าที่กำลังตรวจสอบของใบเสร็จที่เลือก (เพื่อให้แก้ไขจำนวน Qty และเช็คสถานะได้แบบ Dynamic)
+  const [currentReceiptItems, setCurrentReceiptItems] = useState([]);
 
   const receipts = [
-    { id: '1', code: 'WH-INV-561563', qtyItems: 4, items: [
-      { name: 'Keyboard RGB Gaming', qty: 60, weight: '2.40 KG' },
-      { name: 'Logitech G Pro X Superlight', qty: 120, weight: '1.25 KG' },
-      { name: 'Monitor ASUS TUF Gaming 27"', qty: 5, weight: '6.50 KG' },
-      { name: 'USB Hub 7-Port Type-C', qty: 20, weight: '0.65 KG' }
+    { id: '1', code: 'WH-INV-561563', company: 'Logitech Thailand Co., Ltd.', qtyItems: 4, items: [
+      { name: 'Keyboard RGB Gaming', qty: 60, initialQty: 60, weight: '2.40 KG' },
+      { name: 'Logitech G Pro X Superlight', qty: 120, initialQty: 120, weight: '1.25 KG' },
+      { name: 'Monitor ASUS TUF Gaming 27"', qty: 5, initialQty: 5, weight: '6.50 KG' },
+      { name: 'USB Hub 7-Port Type-C', qty: 20, initialQty: 20, weight: '0.65 KG' }
     ]},
-    { id: '2', code: 'WH-INV-524531', qtyItems: 2, items: [
-      { name: 'Graphics Card RTX 4060', qty: 6, weight: '1.80 KG' },
-      { name: 'Power Supply 850W', qty: 10, weight: '3.10 KG' }
+    { id: '2', code: 'WH-INV-524531', company: 'NVIDIA Enterprise Asia', qtyItems: 2, items: [
+      { name: 'Graphics Card RTX 4060', qty: 6, initialQty: 6, weight: '1.80 KG' },
+      { name: 'Power Supply 850W', qty: 10, initialQty: 10, weight: '3.10 KG' }
     ]},
-    { id: '3', code: 'WH-INV-642747', qtyItems: 12, items: [{ name: 'Thermal Paste 4g', qty: 50, weight: '0.10 KG' }] },
-    { id: '4', code: 'WH-INV-761563', qtyItems: 5, items: [{ name: 'DDR5 RAM 32GB', qty: 30, weight: '0.20 KG' }] },
-    { id: '5', code: 'WH-INV-764222', qtyItems: 7, items: [{ name: 'CPU Air Cooler', qty: 15, weight: '1.10 KG' }] },
-    { id: '6', code: 'WH-INV-767752', qtyItems: 13, items: [{ name: 'NVMe SSD 2TB', qty: 25, weight: '0.05 KG' }] },
-    { id: '7', code: 'WH-INV-824523', qtyItems: 13, items: [{ name: 'PC Case ATX', qty: 8, weight: '5.20 KG' }] },
-    { id: '8', code: 'WH-INV-832123', qtyItems: 13, items: [{ name: 'Wireless Mouse', qty: 40, weight: '0.30 KG' }] },
+    { id: '3', code: 'WH-INV-642747', company: 'Thermal Grizzly Supply', qtyItems: 12, items: [{ name: 'Thermal Paste 4g', qty: 50, initialQty: 50, weight: '0.10 KG' }] },
+    { id: '4', code: 'WH-INV-761563', company: 'Kingston Technology', qtyItems: 5, items: [{ name: 'DDR5 RAM 32GB', qty: 30, initialQty: 30, weight: '0.20 KG' }] },
+    { id: '5', code: 'WH-INV-764222', company: 'Cooler Master Global', qtyItems: 7, items: [{ name: 'CPU Air Cooler', qty: 15, initialQty: 15, weight: '1.10 KG' }] },
+    { id: '6', code: 'WH-INV-767752', company: 'Samsung Storage TH', qtyItems: 13, items: [{ name: 'NVMe SSD 2TB', qty: 25, initialQty: 25, weight: '0.05 KG' }] },
+    { id: '7', code: 'WH-INV-824523', company: 'Lian Li Industrial', qtyItems: 13, items: [{ name: 'PC Case ATX', qty: 8, initialQty: 8, weight: '5.20 KG' }] },
+    { id: '8', code: 'WH-INV-832123', company: 'Razer Asia-Pacific', qtyItems: 13, items: [{ name: 'Wireless Mouse', qty: 40, initialQty: 40, weight: '0.30 KG' }] },
   ];
 
-  // กรองรายการใบเสร็จตามคำค้นหา (ค้นได้ทั้ง id และ code)
+  // กรองรายการใบเสร็จตามคำค้นหา
   const filteredReceipts = receipts.filter(rec => {
     const q = searchQuery.toLowerCase().trim();
     const receiptName = `receipt ${rec.id}`.toLowerCase();
     const codeName = rec.code.toLowerCase();
-    return receiptName.includes(q) || codeName.includes(q) || rec.id.includes(q);
+    const companyName = rec.company.toLowerCase();
+    return receiptName.includes(q) || codeName.includes(q) || companyName.includes(q) || rec.id.includes(q);
   });
 
-  // เมื่อเลือกใบเสร็จ ให้รีเซ็ตค่าการติ๊กทั้งหมดเป็น false
+  // เมื่อเลือกใบเสร็จ โคลนข้อมูลสินค้าพร้อมกำหนดค่าตั้งต้น (ถ้ายังไม่มี initialQty)
   const handleSelectReceipt = (rec) => {
     setSelectedReceipt(rec);
-    setCheckedItems({});
+    const itemsWithState = rec.items.map(item => ({
+      ...item,
+      initialQty: item.initialQty !== undefined ? item.initialQty : item.qty,
+      qty: item.qty
+    }));
+    setCurrentReceiptItems(itemsWithState);
     setViewMode('detail');
   };
 
-  const handleScanClick = () => {
+  const handleScanGlobal = () => {
     const randomReceipt = receipts[Math.floor(Math.random() * receipts.length)];
     handleSelectReceipt(randomReceipt);
   };
 
-  // ฟังก์ชันสลับสถานะการติ๊กของแต่ละสินค้า
-  const toggleCheckItem = (index) => {
-    setCheckedItems(prev => ({
-      ...prev,
-      [index]: !prev[index]
-    }));
+  // ฟังก์ชันกด Scan ที่แต่ละไอเทม (ลดจำนวน qty ลงทีละ 1)
+  const handleScanItem = (index, e) => {
+    e.stopPropagation(); // ป้องกันไม่ให้ Event ไปตีกับการคลิกครอบการ์ด
+    setCurrentReceiptItems(prev => {
+      const updated = [...prev];
+      if (updated[index].qty > 0) {
+        updated[index] = {
+          ...updated[index],
+          qty: updated[index].qty - 1
+        };
+      }
+      return updated;
+    });
   };
 
-  // ตรวจสอบว่าติ๊กครบทุกชิ้นหรือยัง
-  const allChecked = selectedReceipt && selectedReceipt.items.every((_, idx) => checkedItems[idx]);
+  // ตรวจสอบว่าสินค้าทุกตัวถูกสแกนครบจำนวน (qty เป็น 0 ทั้งหมด) หรือยัง
+  const allScanned = currentReceiptItems.length > 0 && currentReceiptItems.every(item => item.qty === 0);
 
   const handleApprove = () => {
-    if (!allChecked) return;
+    if (!allScanned) return;
     alert(`อนุมัติใบเสร็จ ${selectedReceipt.code} เรียบร้อยแล้ว! ส่งข้อมูลเข้าคลังสำเร็จ`);
     setViewMode('list');
     setSelectedReceipt(null);
-    setCheckedItems({});
+    setCurrentReceiptItems([]);
   };
 
   return (
@@ -142,13 +155,13 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
                   <h3 className="text-lg font-black text-slate-900 tracking-wider shrink-0">RECEPTION TERMINAL</h3>
                   
-                  {/* กล่องค้นหาด้วยเลขใบเสร็จ + ปุ่ม SCAN */}
+                  {/* กล่องค้นหาด้วยเลขใบเสร็จหรือชื่อบริษัท + ปุ่ม SCAN */}
                   <div className="flex items-center gap-2 w-full sm:w-auto">
                     <div className="relative flex-1 sm:w-72">
                       <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                       <input
                         type="text"
-                        placeholder="กรอกเลขใบเสร็จ e.g. WH-INV-561563"
+                        placeholder="ค้นหาเลขใบเสร็จ หรือ ชื่อบริษัท..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         onKeyDown={(e) => {
@@ -161,7 +174,7 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
                     </div>
 
                     <button
-                      onClick={handleScanClick}
+                      onClick={handleScanGlobal}
                       className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-xl font-bold text-xs shadow-md transition transform hover:scale-105 cursor-pointer flex items-center gap-2 shrink-0"
                     >
                       <Scan size={16} /> SCAN
@@ -188,6 +201,9 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
                           <p className="font-bold text-slate-800 text-sm">
                             RECEIPT {rec.id} <span className="text-slate-500 font-normal">[{rec.code}]</span>
                           </p>
+                          <div className="flex items-center gap-1.5 text-xs text-indigo-600 font-semibold mt-0.5">
+                            <Building2 size={13} /> {rec.company}
+                          </div>
                           <p className="text-[11px] text-slate-400 mt-0.5">
                             Quantity : {rec.qtyItems} items
                           </p>
@@ -208,7 +224,7 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
                 </div>
               </div>
             ) : (
-              // ================= VIEW 2: RECEIPT DETAIL & CHECKLIST APPROVAL =================
+              // ================= VIEW 2: RECEIPT DETAIL & SCAN CHECKLIST APPROVAL =================
               <div>
                 <div className="flex justify-between items-center mb-6">
                   <h3 className="text-lg font-black text-slate-900 tracking-wider">RECEPTION TERMINAL</h3>
@@ -225,52 +241,69 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
                     <Bell size={18} />
                   </div>
                   <span className="text-sm font-semibold text-rose-500">
-                    You are organizing the items in <span className="font-bold">RECEIPT {selectedReceipt?.id} [{selectedReceipt?.code}]</span>
+                    Scanning items in <span className="font-bold">RECEIPT {selectedReceipt?.id} [{selectedReceipt?.code}]</span> (<span className="text-indigo-600">{selectedReceipt?.company}</span>)
                   </span>
                 </div>
 
-                {/* Items Checklist List */}
+                {/* Items Scan Checklist List */}
                 <div className="space-y-3 max-h-[340px] overflow-y-auto pr-2 mb-6">
-                  {selectedReceipt?.items.map((item, idx) => {
-                    const isChecked = !!checkedItems[idx];
+                  {currentReceiptItems.map((item, idx) => {
+                    const isCompleted = item.qty === 0;
                     return (
                       <div
                         key={idx}
-                        onClick={() => toggleCheckItem(idx)}
-                        className={`border rounded-2xl px-6 py-4 flex items-center justify-between shadow-sm cursor-pointer transition ${
-                          isChecked ? 'bg-emerald-50/60 border-emerald-300' : 'bg-slate-50 border-slate-200 hover:border-slate-300'
+                        className={`border rounded-2xl px-6 py-4 flex items-center justify-between shadow-sm transition ${
+                          isCompleted ? 'bg-emerald-50/70 border-emerald-300' : 'bg-slate-50 border-slate-200'
                         }`}
                       >
                         <div className="flex items-center gap-4">
-                          {/* Custom Checkbox Box */}
+                          {/* Status Icon */}
                           <div className={`w-6 h-6 rounded-lg border flex items-center justify-center transition ${
-                            isChecked ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-slate-300 bg-white'
+                            isCompleted ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-slate-300 bg-white text-slate-400'
                           }`}>
-                            {isChecked && <Check size={14} strokeWidth={3} />}
+                            {isCompleted ? <Check size={14} strokeWidth={3} /> : <Package size={14} />}
                           </div>
                           <div>
-                            <p className={`font-bold text-sm ${isChecked ? 'text-emerald-900 line-through opacity-80' : 'text-slate-800'}`}>
+                            <p className={`font-bold text-sm ${isCompleted ? 'text-emerald-900 line-through opacity-80' : 'text-slate-800'}`}>
                               {item.name}
                             </p>
-                            <p className="text-[11px] text-slate-400 mt-0.5">Quantity : {item.qty} items</p>
+                            <p className="text-[11px] text-slate-500 mt-0.5">
+                              Remaining Qty: <strong className={item.qty > 0 ? 'text-indigo-600' : 'text-emerald-600'}>{item.qty}</strong> / {item.initialQty} pcs
+                            </p>
                           </div>
                         </div>
-                        <span className="text-xs font-semibold text-slate-500">{item.weight}</span>
+
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs font-semibold text-slate-500">{item.weight}</span>
+                          
+                          {/* ปุ่ม Scan แยกแต่ละไอเทม (ลดจำนวนลงทีละ 1) */}
+                          <button
+                            onClick={(e) => handleScanItem(idx, e)}
+                            disabled={isCompleted}
+                            className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow ${
+                              isCompleted
+                                ? 'bg-emerald-200 text-emerald-700 cursor-not-allowed shadow-none'
+                                : 'bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer active:scale-95'
+                            }`}
+                          >
+                            <Scan size={14} /> Scan QR
+                          </button>
+                        </div>
                       </div>
                     );
                   })}
                 </div>
 
-                {/* Approve Button (Disabled until all items are checked) */}
+                {/* Approve Button (Disabled until all items reach 0 qty) */}
                 <div className="flex justify-between items-center pt-2 border-t border-slate-100">
                   <span className="text-xs text-slate-500 font-medium">
-                    Checked: {Object.values(checkedItems).filter(Boolean).length} / {selectedReceipt?.items.length} items
+                    Completed Items: {currentReceiptItems.filter(i => i.qty === 0).length} / {currentReceiptItems.length}
                   </span>
                   <button
                     onClick={handleApprove}
-                    disabled={!allChecked}
+                    disabled={!allScanned}
                     className={`px-8 py-3 rounded-xl font-bold shadow-lg transition text-sm flex items-center gap-2 ${
-                      allChecked
+                      allScanned
                         ? 'bg-emerald-500 hover:bg-emerald-600 text-white cursor-pointer transform hover:scale-105'
                         : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
                     }`}
