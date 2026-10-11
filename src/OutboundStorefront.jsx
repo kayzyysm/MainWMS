@@ -24,15 +24,11 @@ export default function StorefrontOutboundTerminal({ currentUser, onLogout }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeFilter, setActiveFilter] = useState('all');
   const [cart, setCart] = useState([]);
-  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState('promptpay');
   const [completedOrder, setCompletedOrder] = useState(null);
 
-  // Carousel State
   const recommendedProducts = PRODUCTS.filter(p => p.isRecommended);
   const [currentSlide, setCurrentSlide] = useState(0);
 
-  // Auto-play Carousel
   useEffect(() => {
     if (recommendedProducts.length === 0) return;
     const timer = setInterval(() => {
@@ -44,7 +40,6 @@ export default function StorefrontOutboundTerminal({ currentUser, onLogout }) {
   const nextSlide = () => setCurrentSlide((prev) => (prev + 1) % recommendedProducts.length);
   const prevSlide = () => setCurrentSlide((prev) => (prev - 1 + recommendedProducts.length) % recommendedProducts.length);
 
-  // Filter สินค้า
   const filteredProducts = PRODUCTS.filter(product => {
     const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           product.category.toLowerCase().includes(searchTerm.toLowerCase());
@@ -53,7 +48,6 @@ export default function StorefrontOutboundTerminal({ currentUser, onLogout }) {
     return matchesSearch;
   });
 
-  // Cart Functions
   const handleAddToCart = (product) => {
     setCart(prev => {
       const existing = prev.find(item => item.id === product.id);
@@ -78,14 +72,12 @@ export default function StorefrontOutboundTerminal({ currentUser, onLogout }) {
     setCart(prev => prev.filter(item => item.id !== id));
   };
 
-  // Totals
   const subtotal = cart.reduce((sum, item) => sum + (item.originalPrice * item.qty), 0);
   const grandTotal = cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
   const totalDiscount = subtotal - grandTotal;
   const totalItemsCount = cart.reduce((sum, item) => sum + item.qty, 0);
 
-  // Payment & Receipt
-  const handleConfirmPayment = () => {
+  const handleDirectCheckout = () => {
     const orderData = {
       orderId: 'INV-' + Math.floor(100000 + Math.random() * 900000),
       date: new Date().toLocaleString('th-TH'),
@@ -93,13 +85,12 @@ export default function StorefrontOutboundTerminal({ currentUser, onLogout }) {
       subtotal,
       discount: totalDiscount,
       grandTotal,
-      paymentMethod,
-      cashier: currentUser?.username || 'STAFF-01'
+      paymentMethod: 'Direct Outbound POS',
+      cashier: currentUser?.username || 'Staff_Store'
     };
 
     setCompletedOrder(orderData);
     setCart([]);
-    setIsCheckoutOpen(false);
   };
 
   const handlePrintReceipt = () => {
@@ -108,12 +99,10 @@ export default function StorefrontOutboundTerminal({ currentUser, onLogout }) {
 
   return (
     <div className="p-6 bg-slate-900 h-screen font-sans flex gap-6 overflow-hidden">
-      
-      {/* CSS พิมพ์ใบเสร็จ A4 ซ่อน Header/Footer เบราว์เซอร์อย่างสมบูรณ์ */}
       <style dangerouslySetInnerHTML={{__html: `
         @media print {
           @page {
-            margin: 0; /* ซ่อน Title, URL, Page Number, Date ประจำเบราว์เซอร์ */
+            margin: 0;
             size: A4 portrait;
           }
           body * {
@@ -128,7 +117,7 @@ export default function StorefrontOutboundTerminal({ currentUser, onLogout }) {
             top: 0;
             width: 100%;
             margin: 0;
-            padding: 12mm !important; /* ระยะขอบกระดาษพิมพ์จริง */
+            padding: 12mm !important;
             box-shadow: none !important;
             border: none !important;
             border-radius: 0 !important;
@@ -157,17 +146,7 @@ export default function StorefrontOutboundTerminal({ currentUser, onLogout }) {
         </div>
 
         <div className="relative z-10 space-y-4">
-          <div className="bg-[#1a233a]/90 backdrop-blur-md border border-slate-700/60 rounded-2xl p-4 shadow-lg">
-            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Outbound Cart Summary</span>
-            <div className="flex justify-between items-baseline mt-2">
-              <span className="text-xs text-slate-400">รายการในรถเข็น:</span>
-              <span className="text-sm font-bold text-white">{totalItemsCount} ชิ้น</span>
-            </div>
-            <div className="flex justify-between items-baseline mt-1">
-              <span className="text-xs text-slate-400">ยอดรวมชำระ:</span>
-              <span className="text-xl font-black text-emerald-400">฿{grandTotal.toLocaleString()}</span>
-            </div>
-          </div>
+          
 
           <div className="bg-[#1a233a]/85 backdrop-blur-md border border-slate-700/60 rounded-2xl px-5 py-3 flex items-center justify-between shadow-lg">
             <div className="flex items-center gap-2">
@@ -187,8 +166,6 @@ export default function StorefrontOutboundTerminal({ currentUser, onLogout }) {
 
       {/* 2. RIGHT MAIN CONTAINER */}
       <div className="flex-1 bg-white rounded-3xl border border-slate-200 shadow-xl overflow-hidden p-6 flex flex-col justify-between h-full print:hidden">
-        
-        {/* Header & Search */}
         <div className="border-b border-slate-100 pb-4 shrink-0 flex flex-wrap justify-between items-center gap-4">
           <div>
             <div className="flex items-center gap-2">
@@ -213,13 +190,8 @@ export default function StorefrontOutboundTerminal({ currentUser, onLogout }) {
           </div>
         </div>
 
-        {/* Content Area Split */}
         <div className="flex gap-6 flex-1 min-h-0 mt-4 items-start">
-          
-          {/* LEFT: Product Catalog */}
           <div className="flex-1 flex flex-col h-full min-h-0 space-y-4">
-            
-            {/* 1. SLIDESHOW CAROUSEL */}
             {recommendedProducts.length > 0 && (
               <div className="relative h-44 bg-slate-950 rounded-2xl overflow-hidden shrink-0 shadow-md group">
                 {recommendedProducts.map((prod, idx) => {
@@ -276,7 +248,6 @@ export default function StorefrontOutboundTerminal({ currentUser, onLogout }) {
                   );
                 })}
 
-                {/* Nav Controls */}
                 <button 
                   onClick={prevSlide} 
                   className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/40 hover:bg-black/70 text-white p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition z-30"
@@ -292,7 +263,6 @@ export default function StorefrontOutboundTerminal({ currentUser, onLogout }) {
               </div>
             )}
 
-            {/* 2. Filter Tabs */}
             <div className="flex items-center gap-2 shrink-0">
               <button
                 onClick={() => setActiveFilter('all')}
@@ -326,7 +296,6 @@ export default function StorefrontOutboundTerminal({ currentUser, onLogout }) {
               </button>
             </div>
 
-            {/* 3. Product Cards Grid */}
             <div className="flex-1 overflow-y-auto pr-1">
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pb-4">
                 {filteredProducts.map((product) => (
@@ -380,10 +349,8 @@ export default function StorefrontOutboundTerminal({ currentUser, onLogout }) {
                 ))}
               </div>
             </div>
-
           </div>
 
-          {/* RIGHT: Cart Panel */}
           <div className="w-[340px] h-full border border-slate-200 rounded-2xl p-4 bg-slate-50/50 shadow-sm flex flex-col justify-between shrink-0">
             <div className="flex flex-col h-full overflow-hidden">
               <div className="flex items-center justify-between pb-3 border-b border-slate-200 shrink-0">
@@ -396,7 +363,6 @@ export default function StorefrontOutboundTerminal({ currentUser, onLogout }) {
                 </span>
               </div>
 
-              {/* Scrollable Cart Items */}
               <div className="space-y-2.5 my-3 overflow-y-auto flex-1 pr-1">
                 {cart.length === 0 ? (
                   <div className="text-center py-16 text-slate-400 text-xs italic bg-white rounded-2xl border border-dashed border-slate-200">
@@ -434,7 +400,6 @@ export default function StorefrontOutboundTerminal({ currentUser, onLogout }) {
                 )}
               </div>
 
-              {/* Summary Footer */}
               <div className="pt-3 border-t border-slate-200 shrink-0 space-y-2">
                 {totalDiscount > 0 && (
                   <div className="flex justify-between text-xs text-rose-600 font-semibold">
@@ -448,7 +413,7 @@ export default function StorefrontOutboundTerminal({ currentUser, onLogout }) {
                 </div>
 
                 <button
-                  onClick={() => setIsCheckoutOpen(true)}
+                  onClick={handleDirectCheckout}
                   disabled={cart.length === 0}
                   className={`w-full py-2.5 rounded-xl font-bold transition text-xs flex items-center justify-center gap-2 ${
                     cart.length > 0
@@ -461,101 +426,15 @@ export default function StorefrontOutboundTerminal({ currentUser, onLogout }) {
               </div>
             </div>
           </div>
-
         </div>
       </div>
 
-      {/* PAYMENT MODAL */}
-      {isCheckoutOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 print:hidden">
-          <div className="bg-white rounded-3xl p-6 w-[480px] max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-200">
-            <div className="flex justify-between items-center mb-4 pb-3 border-b border-slate-100">
-              <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
-                <CreditCard className="text-emerald-600" size={18} /> ชำระเงิน (Payment)
-              </h3>
-              <button onClick={() => setIsCheckoutOpen(false)} className="text-slate-400 hover:text-slate-600 font-bold cursor-pointer">
-                ✕
-              </button>
-            </div>
-
-            <div className="space-y-4 my-4">
-              <label className="text-xs font-bold text-slate-600 block">เลือกช่องทางการชำระเงิน:</label>
-              <div className="grid grid-cols-3 gap-3">
-                <button
-                  onClick={() => setPaymentMethod('promptpay')}
-                  className={`p-3 rounded-2xl border-2 text-center transition flex flex-col items-center gap-1.5 cursor-pointer ${
-                    paymentMethod === 'promptpay' ? 'border-indigo-600 bg-indigo-50 text-indigo-700 font-bold' : 'border-slate-200 text-slate-600'
-                  }`}
-                >
-                  <QrCode size={20} />
-                  <span className="text-xs">PromptPay</span>
-                </button>
-                <button
-                  onClick={() => setPaymentMethod('card')}
-                  className={`p-3 rounded-2xl border-2 text-center transition flex flex-col items-center gap-1.5 cursor-pointer ${
-                    paymentMethod === 'card' ? 'border-indigo-600 bg-indigo-50 text-indigo-700 font-bold' : 'border-slate-200 text-slate-600'
-                  }`}
-                >
-                  <CreditCard size={20} />
-                  <span className="text-xs">Credit Card</span>
-                </button>
-                <button
-                  onClick={() => setPaymentMethod('cash')}
-                  className={`p-3 rounded-2xl border-2 text-center transition flex flex-col items-center gap-1.5 cursor-pointer ${
-                    paymentMethod === 'cash' ? 'border-indigo-600 bg-indigo-50 text-indigo-700 font-bold' : 'border-slate-200 text-slate-600'
-                  }`}
-                >
-                  <Tag size={20} />
-                  <span className="text-xs">เงินสด (Cash)</span>
-                </button>
-              </div>
-
-              {paymentMethod === 'promptpay' && (
-                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-center space-y-2">
-                  <div className="w-28 h-28 bg-white border border-slate-300 rounded-xl mx-auto flex items-center justify-center shadow-xs">
-                    <QrCode size={70} className="text-slate-800" />
-                  </div>
-                  <p className="text-[11px] text-slate-500">สแกน QR Code เพื่อชำระเงิน <b>฿{grandTotal.toLocaleString()}</b></p>
-                </div>
-              )}
-
-              <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-100 space-y-1.5 text-xs">
-                <div className="flex justify-between text-slate-600">
-                  <span>ราคารวมสินค้า:</span>
-                  <span>฿{subtotal.toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between text-rose-600">
-                  <span>ส่วนลด:</span>
-                  <span>-฿{totalDiscount.toLocaleString()}</span>
-                </div>
-                <div className="border-t border-slate-200 pt-2 flex justify-between font-black text-slate-900 text-sm">
-                  <span>ยอดชำระสุทธิ:</span>
-                  <span className="text-emerald-600">฿{grandTotal.toLocaleString()}</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex gap-3 mt-6">
-              <button onClick={() => setIsCheckoutOpen(false)} className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-bold text-xs cursor-pointer">
-                ยกเลิก
-              </button>
-              <button onClick={handleConfirmPayment} className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs shadow-md flex items-center justify-center gap-1.5 cursor-pointer">
-                <CheckCircle2 size={16} /> ยืนยันรับชำระเงิน
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* RECEIPT MODAL */}
       {completedOrder && (
         <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 print:p-0 print:bg-white print:fixed print:inset-0">
           <div className="bg-white rounded-3xl p-6 w-full max-w-3xl max-h-[92vh] flex flex-col justify-between shadow-2xl border border-slate-200 print:shadow-none print:border-none print:w-full print:p-0 print:max-h-none">
-            
-            {/* Control Header Before Print */}
             <div className="flex justify-between items-center mb-4 pb-3 border-b border-slate-100 shrink-0 print:hidden">
               <span className="text-xs font-bold text-emerald-600 flex items-center gap-1.5 bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-200">
-                <CheckCircle2 size={16} /> ชำระเงินสำเร็จ / Transaction Completed
+                <CheckCircle2 size={16} /> ทำรายการสำเร็จ / Transaction Completed
               </span>
               <div className="flex gap-2">
                 <button 
@@ -573,11 +452,9 @@ export default function StorefrontOutboundTerminal({ currentUser, onLogout }) {
               </div>
             </div>
 
-            {/* PRINTABLE RECEIPT CONTENT */}
             <div className="overflow-y-auto flex-1 pr-1 print:overflow-visible">
               <div id="printable-outbound-receipt" className="bg-white rounded-2xl border border-slate-200 p-6 sm:p-8 text-slate-800 relative w-full flex flex-col justify-between overflow-hidden">
                 <div>
-                  {/* Header ใบเสร็จ โทน Outbound Emerald/Dark Slate */}
                   <div className="bg-[#052e16] text-white -mx-6 -mt-6 sm:-mx-8 sm:-mt-8 p-6 sm:p-8 mb-6 flex justify-between items-start rounded-t-2xl" style={{ backgroundColor: '#052e16', color: '#ffffff' }}>
                     <div>
                       <div className="flex items-center gap-2">
@@ -594,9 +471,7 @@ export default function StorefrontOutboundTerminal({ currentUser, onLogout }) {
                       <p className="text-xs font-mono font-bold text-emerald-400">RECEIPT NO: {completedOrder.orderId}</p>
                       <p className="text-xs font-mono text-slate-300 mt-0.5">Date: {completedOrder.date}</p>
                       <p className="text-xs font-mono text-slate-300">Staff: {completedOrder.cashier}</p>
-                      <p className="text-xs font-mono text-emerald-300 font-semibold mt-0.5">Payment: {completedOrder.paymentMethod.toUpperCase()}</p>
                       
-                      {/* QR Code ประจำใบเสร็จ */}
                       <div className="mt-3 bg-white p-1.5 rounded-xl inline-block shadow-md">
                         <img
                           src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(completedOrder.orderId)}`}
@@ -607,7 +482,6 @@ export default function StorefrontOutboundTerminal({ currentUser, onLogout }) {
                     </div>
                   </div>
 
-                  {/* ตารางสินค้า */}
                   <table className="w-full text-left border-collapse">
                     <thead>
                       <tr className="bg-slate-50 text-xs font-bold text-slate-600 border-b border-slate-200">
@@ -631,7 +505,6 @@ export default function StorefrontOutboundTerminal({ currentUser, onLogout }) {
                     </tbody>
                   </table>
 
-                  {/* Summary Breakdown */}
                   <div className="mt-6 flex justify-end">
                     <div className="w-64 bg-slate-50 p-4 rounded-2xl border border-slate-200/80 space-y-2 text-xs">
                       <div className="flex justify-between text-slate-600">
@@ -652,7 +525,6 @@ export default function StorefrontOutboundTerminal({ currentUser, onLogout }) {
                   </div>
                 </div>
 
-                {/* ลายเซ็นท้ายใบเสร็จ */}
                 <div className="mt-10 pt-6 border-t border-slate-100">
                   <div className="grid grid-cols-2 gap-12 text-xs mb-6">
                     <div className="text-center">
@@ -682,11 +554,9 @@ export default function StorefrontOutboundTerminal({ currentUser, onLogout }) {
                 ปิดหน้าต่างและเริ่มขายรายการใหม่
               </button>
             </div>
-
           </div>
         </div>
       )}
-
     </div>
   );
 }
