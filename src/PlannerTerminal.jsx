@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronUp, Bell, ArrowLeft, Box, CheckCircle2, Layers, History, Clock, MapPin, Sparkles, Wrench } from 'lucide-react';
+import { ChevronUp, Bell, ArrowLeft, Box, CheckCircle2, Layers, History, Clock, MapPin, Sparkles, Wrench, Building2 } from 'lucide-react';
 
 // Mock Data สินค้าที่มีจัดเก็บอยู่ใน Rack และ Slot ต่างๆ (ปรับให้แต่ละ Slot เก็บอาร์เรย์รายการสินค้า items ได้สูงสุด 4 ชนิด)
 const initialRackStorageData = {
@@ -92,7 +92,7 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
 
   const plannerReceipts = [
     {
-      id: '1', code: 'WH-INV-342321', qtyItems: 4, items: [
+      id: '1', code: 'WH-INV-342321', company: 'Logitech Thailand Co., Ltd.', qtyItems: 4, items: [
         { id: 'item-1', name: 'Keyboard RGB Gaming', qty: 60, weight: '2.40 KG' },
         { id: 'item-2', name: 'Logitech G Pro X Superlight', qty: 120, weight: '1.25 KG' },
         { id: 'item-3', name: 'Monitor ASUS TUF Gaming 27"', qty: 5, weight: '6.50 KG' },
@@ -100,7 +100,7 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
       ]
     },
     {
-      id: '2', code: 'WH-INV-442747', qtyItems: 2, items: [
+      id: '2', code: 'WH-INV-442747', company: 'NVIDIA Enterprise Asia', qtyItems: 2, items: [
         { id: 'item-5', name: 'Graphics Card RTX 4060', qty: 6, weight: '1.80 KG' },
         { id: 'item-6', name: 'Power Supply 850W', qty: 10, weight: '3.10 KG' }
       ]
@@ -327,7 +327,7 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
   };
 
   const handleApproveAll = () => {
-    alert(`อนุมัติและบันทึกการจัดเก็บใบเสร็จ ${selectedReceipt.code} เข้าคลังสินค้าเรียบร้อยแล้ว!`);
+    alert(`อนุมัติและบันทึกการจัดเก็บใบเสร็จ ${selectedReceipt.code} เรียบร้อยแล้ว!`);
     setViewMode('list');
     setSelectedReceipt(null);
   };
@@ -404,6 +404,9 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
                       <p className="font-bold text-slate-800 text-sm">
                         RECEIPT {rec.id} <span className="text-slate-500 font-normal">[{rec.code}]</span>
                       </p>
+                      <div className="flex items-center gap-1.5 text-xs text-indigo-600 font-semibold mt-0.5">
+                        <Building2 size={13} /> {rec.company}
+                      </div>
                       <p className="text-[11px] text-slate-400 mt-0.5">Quantity : {rec.qtyItems} items</p>
                     </div>
                     <button onClick={() => handleOpenOrganize(rec)} className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-6 py-2.5 rounded-xl transition shadow">
@@ -542,7 +545,7 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
                     <Box className="w-5 h-5 text-indigo-600" />
                     <div>
                       <h3 className="font-black text-slate-800 text-sm">RECEIPT ITEMS</h3>
-                      <p className="text-[11px] text-indigo-600 font-bold">{selectedReceipt?.code}</p>
+                      <p className="text-[11px] text-indigo-600 font-bold">{selectedReceipt?.code} <span className="text-slate-500 font-normal">({selectedReceipt?.company})</span></p>
                     </div>
                   </div>
 
