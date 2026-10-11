@@ -10,9 +10,11 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
   const roles = [
     { id: 'admin', label: 'Admin' },
     { id: 'staff', label: 'Staff' },
+    { id: 'staffout', label: 'Staff Out' },
     { id: 'reception', label: 'Reception' },
     { id: 'vendor', label: 'Vendor' },
     { id: 'planner', label: 'Planner' },
+    { id: 'plannerout', label: 'Planner Out' },
     { id: 'user', label: 'User' },
   ];
 

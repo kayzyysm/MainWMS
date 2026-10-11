@@ -87,7 +87,7 @@ export default function WarehouseLandingPage({ currentUser, setCurrentUser, onLo
 
                   if (role.includes('vendor') || role.includes('vender')) {
                     return (
-                      <button 
+                      <button
                         onClick={() => onNavigate('vendor')}
                         className="w-full py-4 rounded-2xl bg-gradient-to-r from-[#4c1d95] to-[#2563eb] text-white font-bold tracking-widest text-sm shadow-md hover:brightness-110 transition-all uppercase cursor-pointer"
                       >
@@ -98,7 +98,7 @@ export default function WarehouseLandingPage({ currentUser, setCurrentUser, onLo
 
                   if (role.includes('reception')) {
                     return (
-                      <button 
+                      <button
                         onClick={() => onNavigate('reception')}
                         className="w-full py-4 rounded-2xl bg-gradient-to-r from-[#4c1d95] to-[#2563eb] text-white font-bold tracking-widest text-sm shadow-md hover:brightness-110 transition-all uppercase cursor-pointer"
                       >
@@ -109,7 +109,7 @@ export default function WarehouseLandingPage({ currentUser, setCurrentUser, onLo
 
                   if (role.includes('admin')) {
                     return (
-                      <button 
+                      <button
                         onClick={() => onNavigate('admin')}
                         className="w-full py-4 rounded-2xl bg-gradient-to-r from-[#4c1d95] to-[#2563eb] text-white font-bold tracking-widest text-sm shadow-md hover:brightness-110 transition-all uppercase cursor-pointer"
                       >
@@ -120,7 +120,7 @@ export default function WarehouseLandingPage({ currentUser, setCurrentUser, onLo
 
                   if (role.includes('staff')) {
                     return (
-                      <button 
+                      <button
                         onClick={() => onNavigate('staff')}
                         className="w-full py-4 rounded-2xl bg-gradient-to-r from-[#4c1d95] to-[#2563eb] text-white font-bold tracking-widest text-sm shadow-md hover:brightness-110 transition-all uppercase cursor-pointer"
                       >
@@ -129,9 +129,20 @@ export default function WarehouseLandingPage({ currentUser, setCurrentUser, onLo
                     );
                   }
 
+                  if (role.includes('plannerout')) {
+                    return (
+                      <button
+                        onClick={() => onNavigate('plannerout')}
+                        className="w-full py-4 rounded-2xl bg-gradient-to-r from-[#4c1d95] to-[#2563eb] text-white font-bold tracking-widest text-sm shadow-md hover:brightness-110 transition-all uppercase cursor-pointer"
+                      >
+                        PLANNER Outbound
+                      </button>
+                    );
+                  }
+                  
                   if (role.includes('planner')) {
                     return (
-                      <button 
+                      <button
                         onClick={() => onNavigate('planner')}
                         className="w-full py-4 rounded-2xl bg-gradient-to-r from-[#4c1d95] to-[#2563eb] text-white font-bold tracking-widest text-sm shadow-md hover:brightness-110 transition-all uppercase cursor-pointer"
                       >
@@ -140,8 +151,10 @@ export default function WarehouseLandingPage({ currentUser, setCurrentUser, onLo
                     );
                   }
 
+                  
+
                   return (
-                    <button 
+                    <button
                       onClick={() => onNavigate('outbound')}
                       className="w-full py-4 rounded-2xl bg-gradient-to-r from-[#4c1d95] to-[#2563eb] text-white font-bold tracking-widest text-sm shadow-md hover:brightness-110 transition-all uppercase cursor-pointer"
                     >
@@ -257,17 +270,17 @@ export default function WarehouseLandingPage({ currentUser, setCurrentUser, onLo
 
         {/* Hero Image */}
         <div className="w-full h-[450px] rounded-[2rem] overflow-hidden shadow-lg">
-          <img 
-            src="https://images.unsplash.com/photo-1506744038136-46273834b3fb?q=80&w=2000&auto=format&fit=crop" 
-            alt="Landscape" 
-            className="w-full h-full object-cover" 
+          <img
+            src="https://images.unsplash.com/photo-1506744038136-46273834b3fb?q=80&w=2000&auto=format&fit=crop"
+            alt="Landscape"
+            className="w-full h-full object-cover"
           />
         </div>
       </section>
 
       {/* ================= 3. HOW-TO / FEATURES SECTION ================= */}
       <section id="how-to" className="py-24 max-w-6xl mx-auto px-6 border-t border-gray-200/60 scroll-mt-20">
-        
+
         {/* Part A: See the Big Picture */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-16 items-center mb-32">
           <div>
@@ -275,7 +288,7 @@ export default function WarehouseLandingPage({ currentUser, setCurrentUser, onLo
             <p className="text-xs text-gray-500 mb-10 leading-relaxed max-w-md">
               Area turns your data into clear, vibrant visuals that show you exactly what's happening in each region.
             </p>
-            
+
             <div className="space-y-6 border-t border-gray-100 pt-6">
               {[
                 "Spot Trends in Seconds: No more digging through numbers.",
@@ -296,9 +309,9 @@ export default function WarehouseLandingPage({ currentUser, setCurrentUser, onLo
           </div>
 
           <div className="h-[500px] bg-[#eae5d9] rounded-[2rem] overflow-hidden flex items-center justify-center p-8">
-            <img 
-              src="https://images.unsplash.com/photo-1579783902614-a3fb3927b675?q=80&w=1000&auto=format&fit=crop" 
-              alt="Artistic 3D Display" 
+            <img
+              src="https://images.unsplash.com/photo-1579783902614-a3fb3927b675?q=80&w=1000&auto=format&fit=crop"
+              alt="Artistic 3D Display"
               className="w-full h-full object-cover rounded-xl"
             />
           </div>
@@ -361,9 +374,9 @@ export default function WarehouseLandingPage({ currentUser, setCurrentUser, onLo
         {/* Part C: Testimonial */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-center mb-32">
           <div className="h-[400px] rounded-[2rem] overflow-hidden">
-            <img 
-              src="https://images.unsplash.com/photo-1509281373149-e957c6296406?q=80&w=1000&auto=format&fit=crop" 
-              alt="Testimonial Art" 
+            <img
+              src="https://images.unsplash.com/photo-1509281373149-e957c6296406?q=80&w=1000&auto=format&fit=crop"
+              alt="Testimonial Art"
               className="w-full h-full object-cover"
             />
           </div>
@@ -410,24 +423,24 @@ export default function WarehouseLandingPage({ currentUser, setCurrentUser, onLo
           </div>
 
           <div className="w-full h-[400px] rounded-[2rem] overflow-hidden">
-            <img 
-              src="https://images.unsplash.com/photo-1500382017468-9049fed747ef?q=80&w=2000&auto=format&fit=crop" 
-              alt="Map landscape" 
-              className="w-full h-full object-cover" 
+            <img
+              src="https://images.unsplash.com/photo-1500382017468-9049fed747ef?q=80&w=2000&auto=format&fit=crop"
+              alt="Map landscape"
+              className="w-full h-full object-cover"
             />
           </div>
         </div>
 
       </section>
-      
-      
+
+
       {/* ================= 4. FOOTER ================= */}
       <footer id="contact" className="py-20 max-w-6xl mx-auto px-6 text-center border-t border-gray-200 scroll-mt-20">
         <h2 className="text-4xl font-serif mb-4">Connect with us</h2>
         <p className="text-xs text-gray-500 max-w-md mx-auto mb-8 leading-relaxed">
           Schedule a quick call to learn how KPA Warehouse Automation System can work for you.
         </p>
-        
+
         <div className="mt-16 pt-8 border-t border-gray-200/60 flex flex-col md:flex-row justify-between items-center text-xs text-gray-400 gap-4">
           <div className="flex gap-6 font-semibold text-gray-700">
             <a href="#benefits" onClick={(e) => scrollToSection(e, 'benefits')}>Benefits</a>
