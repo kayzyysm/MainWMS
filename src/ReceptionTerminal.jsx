@@ -102,7 +102,7 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
             KPA
           </h1>
           <p className="text-3xl font-bold tracking-[0.35em] text-slate-200 mt-2">
-            W . M S
+            W M S
           </p>
           <div className="mt-8 relative inline-block">
             <div className="w-12 h-12 rounded-full border-2 border-dashed border-blue-400 flex items-center justify-center animate-spin-slow">

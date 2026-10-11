@@ -263,7 +263,7 @@ export default function PlannerTerminaloutbound({ currentUser, onLogout }) {
   };
 
   const handleApproveOutbound = () => {
-    alert(`อนุมัติแผน Outbound สำหรับคำสั่งซื้อ ${selectedOrder.code} เรียบร้อยแล้ว! ส่งข้อมูลให้ทีม Picker ดำเนินการหยิบสินค้า`);
+    alert(`อนุมัติแผน Outbound สำหรับคำสั่งซื้อ ${selectedOrder.code} เรียบร้อยแล้ว! ส่งข้อมูลให้ทีม Staff ดำเนินการหยิบสินค้า`);
     setViewMode('list');
     setSelectedOrder(null);
   };

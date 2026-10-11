@@ -421,7 +421,7 @@ export default function StorefrontOutboundTerminal({ currentUser, onLogout }) {
                       : 'bg-slate-200 text-slate-400 cursor-not-allowed'
                   }`}
                 >
-                  <CreditCard size={15} /> ดำเนินการชำระเงิน (Checkout)
+                  <CreditCard size={15} /> พิมพ์ใบเสร็จ (Print Receipt)
                 </button>
               </div>
             </div>
@@ -433,9 +433,7 @@ export default function StorefrontOutboundTerminal({ currentUser, onLogout }) {
         <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 print:p-0 print:bg-white print:fixed print:inset-0">
           <div className="bg-white rounded-3xl p-6 w-full max-w-3xl max-h-[92vh] flex flex-col justify-between shadow-2xl border border-slate-200 print:shadow-none print:border-none print:w-full print:p-0 print:max-h-none">
             <div className="flex justify-between items-center mb-4 pb-3 border-b border-slate-100 shrink-0 print:hidden">
-              <span className="text-xs font-bold text-emerald-600 flex items-center gap-1.5 bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-200">
-                <CheckCircle2 size={16} /> ทำรายการสำเร็จ / Transaction Completed
-              </span>
+              
               <div className="flex gap-2">
                 <button 
                   onClick={handlePrintReceipt} 
@@ -529,11 +527,11 @@ export default function StorefrontOutboundTerminal({ currentUser, onLogout }) {
                   <div className="grid grid-cols-2 gap-12 text-xs mb-6">
                     <div className="text-center">
                       <div className="border-b border-dashed border-slate-300 pb-8"></div>
-                      <p className="text-slate-500 mt-2 font-medium">ลายเซ็นลูกค้า / Customer Signature</p>
+                      <p className="text-slate-500 mt-2 font-medium">Customer Signature</p>
                     </div>
                     <div className="text-center">
                       <div className="border-b border-dashed border-slate-300 pb-8"></div>
-                      <p className="text-slate-500 mt-2 font-medium">ลายเซ็นแคชเชียร์ / Cashier Signature</p>
+                      <p className="text-slate-500 mt-2 font-medium">Recepition Signature</p>
                     </div>
                   </div>
                   <div className="text-center pt-2">
