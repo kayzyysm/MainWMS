@@ -118,6 +118,17 @@ export default function WarehouseLandingPage({ currentUser, setCurrentUser, onLo
                     );
                   }
 
+                  if (role.includes('staffout')) {
+                    return (
+                      <button
+                        onClick={() => onNavigate('staffout')}
+                        className="w-full py-4 rounded-2xl bg-gradient-to-r from-[#4c1d95] to-[#2563eb] text-white font-bold tracking-widest text-sm shadow-md hover:brightness-110 transition-all uppercase cursor-pointer"
+                      >
+                        STAFF Outbound
+                      </button>
+                    );
+                  }
+
                   if (role.includes('staff')) {
                     return (
                       <button
@@ -139,7 +150,7 @@ export default function WarehouseLandingPage({ currentUser, setCurrentUser, onLo
                       </button>
                     );
                   }
-                  
+
                   if (role.includes('planner')) {
                     return (
                       <button
