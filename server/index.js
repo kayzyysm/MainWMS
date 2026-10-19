@@ -6,6 +6,8 @@ require('dotenv').config();
 const authRoutes = require('./routes/authRoutes');
 const rackRoutes = require('./routes/rackRoutes');
 const documentRoutes = require('./routes/documentRoutes');
+const productRoutes = require('./routes/products');
+const receiptRoutes = require('./routes/receipts');
 
 const app = express();
 
@@ -22,6 +24,8 @@ app.use(express.json());
 app.use('/api/auth', authRoutes);
 app.use('/api/racks', rackRoutes);
 app.use('/api/documents', documentRoutes);
+app.use('/api/products', productRoutes);
+app.use('/api/receipts', receiptRoutes);
 
 // Database Connection
 mongoose.connect(process.env.MONGO_URI)

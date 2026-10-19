@@ -14,52 +14,100 @@ export default function VendorTerminal({ currentUser, onBack, onLogout }) {
   // เก็บจำนวนสติ๊กเกอร์ที่จะพิมพ์แยกตาม ID สินค้า { [productId]: count }
   const [stickerCounts, setStickerCounts] = useState({});
 
-  const [receipts, setReceipts] = useState([
-    { 
-      id: 'RECEIPT 1', 
-      docNo: 'WH-INV-761561', 
-      date: '8/5/2569', 
-      quantity: 4, 
-      status: 'Pending', 
-      items: [
-        { id: 'PRD-001', productName: 'Keyboard RGB', quantity: 2, weight: 0.8, totalWeight: '1.60' },
-        { id: 'PRD-002', productName: 'Laptop Stand', quantity: 2, weight: 1.2, totalWeight: '2.40' }
-      ] 
-    },
-    { 
-      id: 'RECEIPT 3', 
-      docNo: 'WH-INV-761562', 
-      date: '8/5/2569', 
-      quantity: 2, 
-      status: 'Confirmed', 
-      items: [
-        { id: 'PRD-003', productName: 'Webcam 1080p', quantity: 2, weight: 0.3, totalWeight: '0.60' }
-      ] 
-    },
-  ]);
+  const [receipts, setReceipts] = useState([]);
+  const [productOptions, setProductOptions] = useState([]);
+  const [loadingProducts, setLoadingProducts] = useState(false);
 
-  const productOptions = [
-    { id: 'PRD-001', name: 'Keyboard RGB', weight: 0.8 },
-    { id: 'PRD-002', name: 'Laptop Stand', weight: 1.2 },
-    { id: 'PRD-003', name: 'Webcam 1080p', weight: 0.3 },
-    { id: 'PRD-004', name: 'Mouse Pad XL', weight: 0.5 },
-    { id: 'PRD-005', name: 'Mouse Wireless', weight: 0.2 },
-  ];
+  // 1. ดึงรายการสินค้าทั้งหมดจาก MongoDB (Product Master)
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        setLoadingProducts(true);
+        const res = await fetch('http://localhost:5000/api/products');
+        if (res.ok) {
+          const data = await res.json();
+          setProductOptions(data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch products:', err);
+      } finally {
+        setLoadingProducts(false);
+      }
+    };
+    fetchProducts();
+  }, []);
+
+  // 2. ดึงรายการใบเสร็จเดิมจาก MongoDB เมื่อเปิดหน้า VendorTerminal
+  useEffect(() => {
+    const fetchReceipts = async () => {
+      try {
+        const res = await fetch('http://localhost:5000/api/receipts');
+        if (res.ok) {
+          const data = await res.json();
+          setReceipts(data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch receipts:', err);
+      }
+    };
+    fetchReceipts();
+  }, []);
 
   // อัปเดตจำนวนสติ๊กเกอร์เริ่มต้นเมื่อเปลี่ยนใบเสร็จที่เลือก
   useEffect(() => {
     if (activeReceipt && activeReceipt.items) {
       const initialCounts = {};
       activeReceipt.items.forEach(item => {
-        initialCounts[item.id] = item.quantity; // เริ่มต้นใช้จำนวนตามรายการรับเข้า
+        initialCounts[item.id] = item.quantity;
       });
       setStickerCounts(initialCounts);
     }
   }, [activeReceipt]);
 
+  // ค้นหาสินค้าได้ทั้งจากชื่อสินค้า (Name) และรหัสสินค้า (ID/SKU)
   const filteredProducts = productOptions.filter(p =>
-    p.name.toLowerCase().includes(searchTerm.toLowerCase())
+    (p.name && p.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (p.id && p.id.toLowerCase().includes(searchTerm.toLowerCase()))
   );
+
+  // บันทึกใบเสร็จใหม่ลง MongoDB
+  const handleConfirmReceipt = async () => {
+    if (itemList.length === 0) return;
+
+    const totalQty = itemList.reduce((acc, curr) => acc + curr.quantity, 0);
+    const newReceiptName = `RECEIPT ${receipts.length + 1}`;
+    const docNumber = `WH-INV-${Math.floor(100000 + Math.random() * 900000)}`;
+    const currentDate = new Date().toLocaleDateString('th-TH');
+
+    const newReceiptData = {
+      receiptId: newReceiptName,
+      docNo: docNumber,
+      date: currentDate,
+      quantity: totalQty,
+      status: 'Pending',
+      items: [...itemList]
+    };
+
+    try {
+      const res = await fetch('http://localhost:5000/api/receipts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newReceiptData)
+      });
+
+      if (res.ok) {
+        const savedData = await res.json();
+        setReceipts([savedData, ...receipts]);
+        setActiveReceipt(savedData);
+        setCurrentView('preview');
+        setItemList([]);
+      } else {
+        alert('ไม่สามารถบันทึกใบเสร็จลงฐานข้อมูลได้');
+      }
+    } catch (err) {
+      console.error('Error saving receipt:', err);
+    }
+  };
 
   const handleAddItem = () => {
     if (!searchTerm || !quantity) return;
@@ -82,30 +130,6 @@ export default function VendorTerminal({ currentUser, onBack, onLogout }) {
     setSelectedProduct(null);
   };
 
-  const handleConfirmReceipt = () => {
-    if (itemList.length === 0) return;
-
-    const totalQty = itemList.reduce((acc, curr) => acc + curr.quantity, 0);
-    const newReceiptName = `RECEIPT ${receipts.length + 1}`;
-    const docNumber = `WH-INV-${Math.floor(100000 + Math.random() * 900000)}`;
-    const currentDate = new Date().toLocaleDateString('th-TH');
-
-    const newReceiptData = {
-      id: newReceiptName,
-      docNo: docNumber,
-      date: currentDate,
-      quantity: totalQty,
-      status: 'Pending',
-      items: [...itemList]
-    };
-
-    setReceipts([newReceiptData, ...receipts]);
-    setActiveReceipt(newReceiptData);
-    setCurrentView('preview');
-    setItemList([]);
-  };
-
-  // ฟังก์ชันปรับจำนวนสติ๊กเกอร์ของแต่ละสินค้า
   const handleStickerCountChange = (productId, newCount) => {
     const val = Math.max(0, parseInt(newCount, 10) || 0);
     setStickerCounts(prev => ({
@@ -114,7 +138,6 @@ export default function VendorTerminal({ currentUser, onBack, onLogout }) {
     }));
   };
 
-  // สร้างรายการสติ๊กเกอร์ QR Code ตามจำนวนที่ผู้ใช้ตั้งค่าไว้ในแต่ละชนิดสินค้า
   const generateStickers = () => {
     if (!activeReceipt || !activeReceipt.items) return [];
 
@@ -123,7 +146,7 @@ export default function VendorTerminal({ currentUser, onBack, onLogout }) {
       const count = stickerCounts[item.id] !== undefined ? stickerCounts[item.id] : item.quantity;
       for (let i = 1; i <= count; i++) {
         stickers.push({
-          stickerId: `${activeReceipt.docNo}-${item.id}`, // รหัส QR แบบเดียวกันสำหรับชนิดสินค้านี้
+          stickerId: `${activeReceipt.docNo}-${item.id}`,
           productName: item.productName,
           sku: item.id,
           labelIndex: i,
@@ -140,7 +163,8 @@ export default function VendorTerminal({ currentUser, onBack, onLogout }) {
     <div className="flex h-screen w-full bg-[#f8f9fa] overflow-hidden font-sans">
 
       {/* CSS สำหรับการพิมพ์ 2 หน้า */}
-      <style dangerouslySetInnerHTML={{__html: `
+      <style dangerouslySetInnerHTML={{
+        __html: `
         @media print {
           @page {
             margin: 0;
@@ -245,34 +269,42 @@ export default function VendorTerminal({ currentUser, onBack, onLogout }) {
               </div>
 
               <div className="space-y-3.5">
-                {receipts.map((item, index) => (
-                  <div
-                    key={index}
-                    onClick={() => {
-                      setActiveReceipt(item);
-                      setCurrentView('preview');
-                    }}
-                    className="bg-white rounded-2xl p-4 px-6 shadow-sm border border-slate-200/80 flex justify-between items-center hover:shadow-md transition-shadow cursor-pointer"
-                  >
-                    <div>
-                      <h4 className="font-extrabold text-slate-800 text-sm tracking-wide">{item.id} ({item.docNo})</h4>
-                      <p className="text-[11px] text-slate-500 font-medium mt-0.5">
-                        Quantity : {item.quantity} items | Date: {item.date}
-                      </p>
+                {receipts.length > 0 ? (
+                  receipts.map((item, index) => (
+                    <div
+                      key={item._id || index}
+                      onClick={() => {
+                        setActiveReceipt(item);
+                        setCurrentView('preview');
+                      }}
+                      className="bg-white rounded-2xl p-4 px-6 shadow-sm border border-slate-200/80 flex justify-between items-center hover:shadow-md transition-shadow cursor-pointer"
+                    >
+                      <div>
+                        <h4 className="font-extrabold text-slate-800 text-sm tracking-wide">
+                          {item.receiptId || item.id} ({item.docNo})
+                        </h4>
+                        <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                          Quantity : {item.quantity} items | Date: {item.date}
+                        </p>
+                      </div>
+                      <div>
+                        {item.status === 'Confirmed' ? (
+                          <span className="bg-[#00a859] text-white px-5 py-1.5 rounded-lg text-xs font-bold tracking-wide inline-block min-w-[90px] text-center shadow-sm">
+                            Confirmed
+                          </span>
+                        ) : (
+                          <span className="bg-[#121858] text-white px-5 py-1.5 rounded-lg text-xs font-bold tracking-wide inline-block min-w-[90px] text-center shadow-sm">
+                            Pending
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <div>
-                      {item.status === 'Confirmed' ? (
-                        <span className="bg-[#00a859] text-white px-5 py-1.5 rounded-lg text-xs font-bold tracking-wide inline-block min-w-[90px] text-center shadow-sm">
-                          Confirmed
-                        </span>
-                      ) : (
-                        <span className="bg-[#121858] text-white px-5 py-1.5 rounded-lg text-xs font-bold tracking-wide inline-block min-w-[90px] text-center shadow-sm">
-                          Pending
-                        </span>
-                      )}
-                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-8 text-slate-400 text-xs font-medium">
+                    ยังไม่มีรายการใบเสร็จรับเข้า
                   </div>
-                ))}
+                )}
               </div>
             </>
           )}
@@ -294,7 +326,7 @@ export default function VendorTerminal({ currentUser, onBack, onLogout }) {
                   <div className="flex-1 relative">
                     <input
                       type="text"
-                      placeholder="Find name of item in warehouse"
+                      placeholder={loadingProducts ? "กำลังโหลดข้อมูลสินค้า..." : "Find name or SKU in warehouse (e.g. Keyboard, PRD-001)"}
                       value={searchTerm}
                       onChange={(e) => {
                         setSearchTerm(e.target.value);
@@ -304,20 +336,26 @@ export default function VendorTerminal({ currentUser, onBack, onLogout }) {
                       className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-xs focus:outline-none focus:border-[#00a859] bg-slate-50/50"
                     />
 
+                    {/* Dropdown แสดงรายการสินค้าที่ค้นพบ */}
                     {isDropdownOpen && searchTerm && filteredProducts.length > 0 && (
-                      <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-20 overflow-hidden">
+                      <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-20 overflow-hidden max-h-60 overflow-y-auto">
                         {filteredProducts.map((p, idx) => (
                           <div
-                            key={idx}
+                            key={p.id || idx}
                             onClick={() => {
                               setSearchTerm(p.name);
                               setSelectedProduct(p);
                               setIsDropdownOpen(false);
                             }}
-                            className="px-4 py-2.5 text-xs hover:bg-slate-100 cursor-pointer flex justify-between items-center text-slate-700"
+                            className="px-4 py-2.5 text-xs hover:bg-slate-100 cursor-pointer flex justify-between items-center text-slate-700 border-b border-slate-100 last:border-0"
                           >
-                            <span className="font-medium">{p.name}</span>
-                            <span className="text-[10px] text-slate-400">Multi-Inbound</span>
+                            <div>
+                              <span className="font-semibold">{p.name}</span>
+                              <span className="text-[10px] text-slate-400 font-mono ml-2">({p.id})</span>
+                            </div>
+                            <span className="text-[10px] text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded font-mono font-bold">
+                              {p.weight} KG
+                            </span>
                           </div>
                         ))}
                       </div>
@@ -339,7 +377,9 @@ export default function VendorTerminal({ currentUser, onBack, onLogout }) {
                     Add to list
                   </button>
                 </div>
-                <p className="text-[10px] text-slate-400 mt-2.5">* กรอกชื่อเพื่อค้นหาสินค้าที่มีอยู่ในระบบ Warehouse อัตโนมัติ</p>
+                <p className="text-[10px] text-slate-400 mt-2.5">
+                  * กรอกชื่อหรือรหัสสินค้าเพื่อค้นหาสินค้าที่มีอยู่ในระบบ Warehouse อัตโนมัติ
+                </p>
               </div>
 
               {itemList.length > 0 && (
@@ -381,7 +421,7 @@ export default function VendorTerminal({ currentUser, onBack, onLogout }) {
           {/* VIEW 3: PDF RECEIPT PREVIEW (PAGE 1 & PAGE 2) */}
           {currentView === 'preview' && activeReceipt && (
             <div className="w-full">
-              {/* แผงควบคุมด้านบนก่อนพิมพ์ (ซ่อนตอนปริ้นท์) */}
+              {/* แผงควบคุมด้านบนก่อนพิมพ์ */}
               <div className="flex justify-between items-center mb-4 print:hidden bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
                 <button
                   onClick={() => setCurrentView('list')}
@@ -398,7 +438,7 @@ export default function VendorTerminal({ currentUser, onBack, onLogout }) {
                 </button>
               </div>
 
-              {/* แผงปรับจำนวนสติ๊กเกอร์แยกตามชนิดสินค้า (ซ่อนตอนปริ้นท์) */}
+              {/* แผงปรับจำนวนสติ๊กเกอร์ */}
               <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 mb-6 print:hidden">
                 <div className="flex justify-between items-center mb-4">
                   <div>
@@ -453,13 +493,11 @@ export default function VendorTerminal({ currentUser, onBack, onLogout }) {
                 </div>
               </div>
 
-              {/* ---------------- CONTAINER สำหรับพิมพ์ทั้ง 2 หน้า ---------------- */}
+              {/* CONTAINER สำหรับพิมพ์ */}
               <div id="printable-receipt" className="space-y-8">
-
-                {/* ==================== PAGE 1: ใบเสร็จปกติ ==================== */}
+                {/* PAGE 1: ใบเสร็จ */}
                 <div className="bg-white rounded-3xl shadow-xl border border-slate-200/90 p-10 text-slate-800 relative w-full min-h-[980px] flex flex-col justify-between">
                   <div>
-                    {/* Header ใบเสร็จ */}
                     <div className="bg-[#161d2f] text-white -mx-10 -mt-10 p-10 mb-8 flex justify-between items-start rounded-t-3xl" style={{ backgroundColor: '#161d2f', color: '#ffffff' }}>
                       <div>
                         <h1 className="text-2xl font-bold tracking-wider">WMS AUTOMATION SYSTEM</h1>
@@ -478,7 +516,6 @@ export default function VendorTerminal({ currentUser, onBack, onLogout }) {
                       </div>
                     </div>
 
-                    {/* ตารางสินค้า */}
                     <table className="w-full text-left border-collapse">
                       <thead>
                         <tr className="bg-slate-50 text-xs font-bold text-slate-600 border-b border-slate-200">
@@ -510,7 +547,6 @@ export default function VendorTerminal({ currentUser, onBack, onLogout }) {
                     </table>
                   </div>
 
-                  {/* ลายเซ็นท้ายใบเสร็จ */}
                   <div className="mt-12">
                     <div className="grid grid-cols-2 gap-16 text-sm mb-8">
                       <div>
@@ -526,10 +562,9 @@ export default function VendorTerminal({ currentUser, onBack, onLogout }) {
                   </div>
                 </div>
 
-                {/* ==================== PAGE 2: QR LABELS / STICKER SHEET ==================== */}
+                {/* PAGE 2: QR LABELS */}
                 <div className="print-page-break bg-white rounded-3xl shadow-xl border border-slate-200/90 p-10 text-slate-800 relative w-full min-h-[980px] flex flex-col justify-between">
                   <div>
-                    {/* Header หน้า 2 */}
                     <div className="border-b-2 border-slate-900 pb-4 mb-6 flex justify-between items-center">
                       <div>
                         <h2 className="text-lg font-black tracking-wider flex items-center gap-2 text-slate-900">
@@ -542,7 +577,6 @@ export default function VendorTerminal({ currentUser, onBack, onLogout }) {
                       </span>
                     </div>
 
-                    {/* ตารางไดคัทสติ๊กเกอร์ (3 Columns Grid) */}
                     <div className="grid grid-cols-3 gap-4">
                       {generateStickers().map((sticker, idx) => (
                         <div
@@ -561,13 +595,12 @@ export default function VendorTerminal({ currentUser, onBack, onLogout }) {
                           </div>
 
                           <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-200">
-                            {/* QR Code ประจำชนิดสินค้า */}
                             <img
                               src={`https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(sticker.stickerId)}`}
                               alt={sticker.stickerId}
                               className="w-16 h-16 object-contain bg-white p-1 rounded border border-slate-200"
                             />
-                            
+
                             <div className="text-right flex-1 pl-2">
                               <p className="text-[9px] font-mono font-bold text-slate-800 break-all leading-tight">
                                 {sticker.stickerId}
@@ -583,7 +616,6 @@ export default function VendorTerminal({ currentUser, onBack, onLogout }) {
                     </div>
                   </div>
 
-                  {/* คำแนะนำสำหรับพนักงาน */}
                   <div className="mt-8 pt-4 border-t border-slate-200 text-center">
                     <p className="text-[11px] text-slate-400">
                       ✂️ ลอกหรือตัดสติ๊กเกอร์ตามเส้นประ และติดลงบนกล่องบรรจุภัณฑ์สินค้าตามชนิด ก่อนส่งให้พนักงาน Putaway
