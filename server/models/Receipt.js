@@ -8,11 +8,12 @@ const receiptSchema = new mongoose.Schema({
   status: { type: String, enum: ['Pending', 'Confirmed'], default: 'Pending' },
   items: [
     {
-      id: { type: String, required: true }, // SKU เช่น 'PRD-001'
+      id: { type: String, required: true },
       productName: { type: String, required: true },
       quantity: { type: Number, required: true },
       weight: { type: Number, required: true },
-      totalWeight: { type: String, required: true }
+      totalWeight: { type: String, required: true },
+      targetLocation: { type: String, default: '' } // <--- เติมบรรทัดนี้เข้าไปครับ
     }
   ]
 }, { timestamps: true });

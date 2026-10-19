@@ -62,11 +62,58 @@ export default function StaffTerminal({ currentUser, onLogout }) {
       setIsScanning(false);
       setScanSuccess(true);
 
+      try {
+        // 1. แยกวิเคราะห์ข้อมูล Rack และ Slot จาก targetLocation เช่น "ZONE-A1 (Slot 1)"
+        const locString = selectedItem.targetLocation; // ตัวอย่าง: "ZONE-A1 (Slot 1)" หรือ "ZONE-A1"
+        const rackMatch = locString.match(/(ZONE-[A-Z0-9-]+)/);
+        const slotMatch = locString.match(/(Slot\s*\d+)/i);
+
+        if (rackMatch) {
+          const rackId = rackMatch[1];
+          const slotName = slotMatch ? slotMatch[1] : 'Slot 1';
+
+          // 2. ดึงข้อมูล Rack ปัจจุบันจาก Backend มาก่อนเพื่อเอาค่า slots เดิม
+          const rackRes = await fetch(`http://localhost:5000/api/racks/${rackId}`);
+          if (rackRes.ok) {
+            const rackData = await rackRes.json();
+            const currentSlots = rackData.slots || {};
+            const targetSlotData = currentSlots[slotName] || { items: [] };
+            const currentItems = [...targetSlotData.items];
+
+            // 3. ตรวจสอบว่ามีสินค้านี้อยู่แล้วใน Slot หรือยัง ถ้ามีให้บวกจำนวนเพิ่ม
+            const existingItemIndex = currentItems.findIndex(i => i.name === selectedItem.name);
+            if (existingItemIndex > -1) {
+              currentItems[existingItemIndex] = {
+                ...currentItems[existingItemIndex],
+                qty: currentItems[existingItemIndex].qty + selectedItem.qty
+              };
+            } else {
+              currentItems.push({
+                name: selectedItem.name,
+                qty: selectedItem.qty,
+                itemId: selectedItem.id
+              });
+            }
+
+            currentSlots[slotName] = { items: currentItems };
+
+            // 4. บันทึกข้อมูลตู้ Rack ที่อัปเดตแล้วกลับเข้า MongoDB ผ่าน API PUT
+            await fetch(`http://localhost:5000/api/racks/${rackId}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ slots: currentSlots })
+            });
+          }
+        }
+      } catch (err) {
+        console.error('Failed to update rack storage in DB:', err);
+      }
+
       setTimeout(async () => {
         const updatedItems = selectedReceipt.items.filter(i => i.id !== selectedItem.id);
 
         if (updatedItems.length === 0) {
-          // ถ้าจัดเก็บครบทุกชิ้นแล้ว ให้ยิง API อัปเดตสถานะเป็น 'Completed' ลง MongoDB
+          // ถ้าจัดเก็บครบทุกชิ้นแล้ว ให้ยิง API อัปเดตสถานะใบเสร็จเป็น 'Completed' ลง MongoDB
           try {
             await fetch(`http://localhost:5000/api/receipts/${selectedReceipt.id}/status`, {
               method: 'PATCH',
@@ -217,8 +264,8 @@ export default function StaffTerminal({ currentUser, onLogout }) {
                         key={item.id}
                         onClick={() => setSelectedItem(item)}
                         className={`border rounded-2xl p-4 transition cursor-pointer shadow-sm flex items-center justify-between ${isSelected
-                            ? 'border-emerald-500 bg-emerald-50/70 ring-2 ring-emerald-400 shadow-md'
-                            : 'border-slate-200 bg-slate-50 hover:border-slate-300'
+                          ? 'border-emerald-500 bg-emerald-50/70 ring-2 ring-emerald-400 shadow-md'
+                          : 'border-slate-200 bg-slate-50 hover:border-slate-300'
                           }`}
                       >
                         <div>
@@ -281,12 +328,12 @@ export default function StaffTerminal({ currentUser, onLogout }) {
                   onClick={handleMockScanItem}
                   disabled={!selectedItem || isScanning || scanSuccess}
                   className={`w-full py-3.5 rounded-xl font-bold shadow-lg transition text-sm flex items-center justify-center gap-2 cursor-pointer ${!selectedItem
-                      ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
-                      : scanSuccess
-                        ? 'bg-emerald-600 text-white'
-                        : isScanning
-                          ? 'bg-slate-300 text-slate-500 cursor-wait'
-                          : 'bg-emerald-500 hover:bg-emerald-600 text-white transform hover:scale-[1.02]'
+                    ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
+                    : scanSuccess
+                      ? 'bg-emerald-600 text-white'
+                      : isScanning
+                        ? 'bg-slate-300 text-slate-500 cursor-wait'
+                        : 'bg-emerald-500 hover:bg-emerald-600 text-white transform hover:scale-[1.02]'
                     }`}
                 >
                   {isScanning ? (

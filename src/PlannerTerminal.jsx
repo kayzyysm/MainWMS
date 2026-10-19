@@ -177,6 +177,8 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
 
   // ฟังก์ชันบันทึกการจัดเก็บลงฐานข้อมูลผ่าน API
   const executeStore = async (rackId, slotName, qtyToStore) => {
+    console.log('--- กำลังกดจัดเก็บ ---', { rackId, slotName, qtyToStore });
+
     const numQty = parseInt(qtyToStore);
     if (isNaN(numQty) || numQty <= 0) {
       alert('กรุณาระบุจำนวนให้ถูกต้อง');
@@ -229,8 +231,28 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ slots: currentSlots })
       });
+
+      // อัปเดต targetLocation ลงในรายการสินค้า
+      const formattedLocation = `${rackId} (${slotName})`; // จะได้ "ZONE-A1 (Slot 4)"
+      const updatedItemsForReceipt = selectedReceipt.items.map(it => {
+        if (it.id === selectedItemToStore.id || it.productName === selectedItemToStore.name || it.name === selectedItemToStore.name) {
+          return { ...it, targetLocation: formattedLocation };
+        }
+        return it;
+      });
+
+      // เช็กดูใน Console (F12) ว่ามี targetLocation โผล่มาในก้อนนี้ไหม
+      console.log("Payload ที่กำลังจะส่งไปอัปเดตใบเสร็จ:", updatedItemsForReceipt);
+
+      await fetch(`http://localhost:5000/api/receipts/${selectedReceipt._id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: updatedItemsForReceipt })
+      });
+      // ------------------------------------------------------------------------------------------
+
     } catch (err) {
-      console.error('Error updating rack in database:', err);
+      console.error('Error updating rack or receipt in database:', err);
     }
 
     setRackStorage(updatedRackStorage);
@@ -266,6 +288,7 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
       alert('กรุณาเลือกตำแหน่งที่ต้องการจัดวางก่อนครับ');
       return;
     }
+    // ใช้ executeStore ตัวเดียวกับระบบ Manual เพื่อให้มันยิงอัปเดตทั้งตู้ Rack และใบเสร็จพร้อมกันครับ
     const success = await executeStore(smartTargetLocation.rackId, smartTargetLocation.slotName, smartInputQty);
     if (success) {
       setIsSmartModalOpen(false);

@@ -35,10 +35,13 @@ router.put('/:rackId', async (req, res) => {
       return res.status(404).json({ message: 'ไม่พบตู้ Rack' });
     }
 
-    // วนลูปอัปเดตค่าลงใน Mongoose Map ของ slots ทีละช่อง
+    // วนลูปอัปเดตค่าลงใน Mongoose Map พร้อมเติม slotName อัตโนมัติ
     if (slots && typeof slots === 'object') {
       for (const [key, value] of Object.entries(slots)) {
-        rack.slots.set(key, value);
+        rack.slots.set(key, {
+          slotName: key, // <--- เติมตรงนี้เพื่อให้ผ่าน Mongoose Schema Validation
+          items: value.items || []
+        });
       }
     }
 

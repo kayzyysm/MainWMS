@@ -45,12 +45,26 @@ export default function VendorTerminal({ currentUser, onBack, onLogout }) {
         if (res.ok) {
           const data = await res.json();
           setReceipts(data);
+
+          // อัปเดตข้อมูลของใบเสร็จที่กำลังพรีวิวอยู่ให้เป็นปัจจุบันเสมอ (ถ้ามี)
+          setActiveReceipt(prevActive => {
+            if (!prevActive) return null;
+            const updatedCurrent = data.find(r => r._id === prevActive._id || r.receiptId === prevActive.receiptId);
+            return updatedCurrent || prevActive;
+          });
         }
       } catch (err) {
         console.error('Failed to fetch receipts:', err);
       }
     };
+
+    // ดึงทันทีเมื่อโหลดหน้า
     fetchReceipts();
+
+    // ตั้งเวลาให้ดึงข้อมูลอัปเดตสถานะทุกๆ 9 วินาที (Real-time Sync)
+    const intervalId = setInterval(fetchReceipts, 9000);
+
+    return () => clearInterval(intervalId);
   }, []);
 
   // อัปเดตจำนวนสติ๊กเกอร์เริ่มต้นเมื่อเปลี่ยนใบเสร็จที่เลือก
@@ -253,6 +267,30 @@ export default function VendorTerminal({ currentUser, onBack, onLogout }) {
               <div className="flex justify-between items-center mb-6">
                 <h3 className="text-xl font-extrabold text-slate-800 tracking-tight">VENDOR TERMINAL</h3>
                 <button
+                  onClick={() => {
+                    // ฟังก์ชันดึงข้อมูลด่วนเมื่อกดปุ่มรีเฟรช
+                    const refreshNow = async () => {
+                      try {
+                        const res = await fetch('http://localhost:5000/api/receipts');
+                        if (res.ok) {
+                          const data = await res.json();
+                          setReceipts(data);
+                          if (activeReceipt) {
+                            const updatedCurrent = data.find(r => r._id === activeReceipt._id || r.receiptId === activeReceipt.receiptId);
+                            if (updatedCurrent) setActiveReceipt(updatedCurrent);
+                          }
+                        }
+                      } catch (err) {
+                        console.error('Failed to refresh receipts:', err);
+                      }
+                    };
+                    refreshNow();
+                  }}
+                  className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition cursor-pointer"
+                >
+                  🔄 Refresh Status
+                </button>
+                <button
                   onClick={() => setCurrentView('add')}
                   className="bg-[#ff1e1e] hover:bg-[#e01414] text-white px-5 py-2.5 rounded-xl font-bold text-xs tracking-wider flex items-center gap-2 shadow-md transition-all active:scale-95 cursor-pointer"
                 >
@@ -288,12 +326,20 @@ export default function VendorTerminal({ currentUser, onBack, onLogout }) {
                         </p>
                       </div>
                       <div>
-                        {item.status === 'Confirmed' ? (
-                          <span className="bg-[#00a859] text-white px-5 py-1.5 rounded-lg text-xs font-bold tracking-wide inline-block min-w-[90px] text-center shadow-sm">
+                        {item.status === 'Completed' ? (
+                          <span className="bg-emerald-700 text-white px-4 py-1.5 rounded-lg text-xs font-bold tracking-wide inline-block min-w-[110px] text-center shadow-sm">
+                            Completed
+                          </span>
+                        ) : item.status === 'Ready to Pick' ? (
+                          <span className="bg-purple-600 text-white px-4 py-1.5 rounded-lg text-xs font-bold tracking-wide inline-block min-w-[110px] text-center shadow-sm">
+                            Ready to Pick
+                          </span>
+                        ) : item.status === 'Confirmed' ? (
+                          <span className="bg-[#00a859] text-white px-4 py-1.5 rounded-lg text-xs font-bold tracking-wide inline-block min-w-[110px] text-center shadow-sm">
                             Confirmed
                           </span>
                         ) : (
-                          <span className="bg-[#121858] text-white px-5 py-1.5 rounded-lg text-xs font-bold tracking-wide inline-block min-w-[90px] text-center shadow-sm">
+                          <span className="bg-[#121858] text-white px-4 py-1.5 rounded-lg text-xs font-bold tracking-wide inline-block min-w-[110px] text-center shadow-sm">
                             Pending
                           </span>
                         )}
