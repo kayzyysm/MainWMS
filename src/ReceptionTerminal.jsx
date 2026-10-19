@@ -1,64 +1,70 @@
-import React, { useState } from 'react';
-import { ChevronUp, Scan, Bell, CheckCircle, ArrowLeft, Layers, Package, Check, Search, Building2, Barcode } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ChevronUp, Scan, Bell, ArrowLeft, Package, Check, Search, Building2 } from 'lucide-react';
 
 export default function ReceptionTerminal({ currentUser, onLogout }) {
   const [viewMode, setViewMode] = useState('list');
   const [selectedReceipt, setSelectedReceipt] = useState(null);
-  
-  // State สำหรับการค้นหาใบเสร็จแบบ Manual
   const [searchQuery, setSearchQuery] = useState('');
 
-  // State เก็บรายการสินค้าที่กำลังตรวจสอบของใบเสร็จที่เลือก (เพื่อให้แก้ไขจำนวน Qty และเช็คสถานะได้แบบ Dynamic)
+  // State สำหรับเก็บรายการใบเสร็จจาก MongoDB
+  const [receipts, setReceipts] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  // State สำหรับเช็คลิสต์รายการสินค้าของใบเสร็จที่เลือก
   const [currentReceiptItems, setCurrentReceiptItems] = useState([]);
 
-  const receipts = [
-    { id: '1', code: 'WH-INV-561563', company: 'Logitech Thailand Co., Ltd.', qtyItems: 4, items: [
-      { name: 'Keyboard RGB Gaming', qty: 60, initialQty: 60, weight: '2.40 KG' },
-      { name: 'Logitech G Pro X Superlight', qty: 120, initialQty: 120, weight: '1.25 KG' },
-      { name: 'Monitor ASUS TUF Gaming 27"', qty: 5, initialQty: 5, weight: '6.50 KG' },
-      { name: 'USB Hub 7-Port Type-C', qty: 20, initialQty: 20, weight: '0.65 KG' }
-    ]},
-    { id: '2', code: 'WH-INV-524531', company: 'NVIDIA Enterprise Asia', qtyItems: 2, items: [
-      { name: 'Graphics Card RTX 4060', qty: 6, initialQty: 6, weight: '1.80 KG' },
-      { name: 'Power Supply 850W', qty: 10, initialQty: 10, weight: '3.10 KG' }
-    ]},
-    { id: '3', code: 'WH-INV-642747', company: 'Thermal Grizzly Supply', qtyItems: 12, items: [{ name: 'Thermal Paste 4g', qty: 50, initialQty: 50, weight: '0.10 KG' }] },
-    { id: '4', code: 'WH-INV-761563', company: 'Kingston Technology', qtyItems: 5, items: [{ name: 'DDR5 RAM 32GB', qty: 30, initialQty: 30, weight: '0.20 KG' }] },
-    { id: '5', code: 'WH-INV-764222', company: 'Cooler Master Global', qtyItems: 7, items: [{ name: 'CPU Air Cooler', qty: 15, initialQty: 15, weight: '1.10 KG' }] },
-    { id: '6', code: 'WH-INV-767752', company: 'Samsung Storage TH', qtyItems: 13, items: [{ name: 'NVMe SSD 2TB', qty: 25, initialQty: 25, weight: '0.05 KG' }] },
-    { id: '7', code: 'WH-INV-824523', company: 'Lian Li Industrial', qtyItems: 13, items: [{ name: 'PC Case ATX', qty: 8, initialQty: 8, weight: '5.20 KG' }] },
-    { id: '8', code: 'WH-INV-832123', company: 'Razer Asia-Pacific', qtyItems: 13, items: [{ name: 'Wireless Mouse', qty: 40, initialQty: 40, weight: '0.30 KG' }] },
-  ];
+  // 1. ดึงรายการใบเสร็จทั้งหมดจาก MongoDB ผ่าน API
+  const fetchReceipts = async () => {
+    try {
+      setLoading(true);
+      const res = await fetch('http://localhost:5000/api/receipts');
+      if (res.ok) {
+        const data = await res.json();
+        setReceipts(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch receipts:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  // กรองรายการใบเสร็จตามคำค้นหา
+  useEffect(() => {
+    fetchReceipts();
+  }, []);
+
+  // กรองรายการใบเสร็จตามคำค้นหา (ค้นจาก ID, docNo, หรือ status)
   const filteredReceipts = receipts.filter(rec => {
     const q = searchQuery.toLowerCase().trim();
-    const receiptName = `receipt ${rec.id}`.toLowerCase();
-    const codeName = rec.code.toLowerCase();
-    const companyName = rec.company.toLowerCase();
-    return receiptName.includes(q) || codeName.includes(q) || companyName.includes(q) || rec.id.includes(q);
+    const docNo = (rec.docNo || '').toLowerCase();
+    const receiptId = (rec.receiptId || rec.id || '').toLowerCase();
+    const company = (rec.company || 'Vendor Partner').toLowerCase();
+    return receiptId.includes(q) || docNo.includes(q) || company.includes(q);
   });
 
-  // เมื่อเลือกใบเสร็จ โคลนข้อมูลสินค้าพร้อมกำหนดค่าตั้งต้น (ถ้ายังไม่มี initialQty)
+  // เมื่อเลือกใบเสร็จ
   const handleSelectReceipt = (rec) => {
     setSelectedReceipt(rec);
-    const itemsWithState = rec.items.map(item => ({
-      ...item,
-      initialQty: item.initialQty !== undefined ? item.initialQty : item.qty,
-      qty: item.qty
+    const formattedItems = (rec.items || []).map(item => ({
+      name: item.productName || item.name,
+      id: item.id,
+      qty: item.quantity || item.qty,
+      initialQty: item.quantity || item.qty,
+      weight: `${item.totalWeight || item.weight || '0'} KG`
     }));
-    setCurrentReceiptItems(itemsWithState);
+    setCurrentReceiptItems(formattedItems);
     setViewMode('detail');
   };
 
   const handleScanGlobal = () => {
+    if (receipts.length === 0) return alert('ไม่มีใบเสร็จในระบบ');
     const randomReceipt = receipts[Math.floor(Math.random() * receipts.length)];
     handleSelectReceipt(randomReceipt);
   };
 
-  // ฟังก์ชันกด Scan ที่แต่ละไอเทม (ลดจำนวน qty ลงทีละ 1)
+  // ฟังก์ชันสแกนสินค้าแต่ละรายการ (ลด Qty ลงทีละ 1)
   const handleScanItem = (index, e) => {
-    e.stopPropagation(); // ป้องกันไม่ให้ Event ไปตีกับการคลิกครอบการ์ด
+    e.stopPropagation();
     setCurrentReceiptItems(prev => {
       const updated = [...prev];
       if (updated[index].qty > 0) {
@@ -71,15 +77,34 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
     });
   };
 
-  // ตรวจสอบว่าสินค้าทุกตัวถูกสแกนครบจำนวน (qty เป็น 0 ทั้งหมด) หรือยัง
+  // เช็คว่าสินค้าทุกชิ้นในใบเสร็จถูกสแกนครบจำนวนหรือยัง
   const allScanned = currentReceiptItems.length > 0 && currentReceiptItems.every(item => item.qty === 0);
 
-  const handleApprove = () => {
-    if (!allScanned) return;
-    alert(`อนุมัติใบเสร็จ ${selectedReceipt.code} เรียบร้อยแล้ว! ส่งข้อมูลเข้าคลังสำเร็จ`);
-    setViewMode('list');
-    setSelectedReceipt(null);
-    setCurrentReceiptItems([]);
+  // 2. ฟังก์ชันกด APPROVE เพื่อเปลี่ยนสถานะเป็น Confirmed ใน MongoDB
+  const handleApprove = async () => {
+    if (!allScanned || !selectedReceipt) return;
+
+    try {
+      const dbId = selectedReceipt._id;
+      const res = await fetch(`http://localhost:5000/api/receipts/${dbId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'Confirmed' })
+      });
+
+      if (res.ok) {
+        alert(`อนุมัติใบเสร็จ ${selectedReceipt.docNo} เรียบร้อยแล้ว! ส่งข้อมูลเข้าคลังสำเร็จ`);
+        await fetchReceipts(); // ดึงข้อมูลล่าสุดมาอัปเดตหน้าจอ
+        setViewMode('list');
+        setSelectedReceipt(null);
+        setCurrentReceiptItems([]);
+      } else {
+        alert('เกิดข้อผิดพลาดในการอัปเดตสถานะใบเสร็จ');
+      }
+    } catch (err) {
+      console.error('Error approving receipt:', err);
+      alert('ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้');
+    }
   };
 
   return (
@@ -87,7 +112,6 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
       
       {/* ================= 1. LEFT SIDEBAR ================= */}
       <div className="w-[320px] lg:w-[380px] h-[calc(100vh-3rem)] sticky top-6 bg-[#0b0f19] text-white flex flex-col justify-between p-8 shrink-0 overflow-hidden rounded-3xl border border-slate-800 shadow-xl">
-
         <div className="absolute inset-0 z-0 opacity-40 mix-blend-luminosity pointer-events-none">
           <img
             src="https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?q=80&w=1000&auto=format&fit=crop"
@@ -104,11 +128,6 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
           <p className="text-3xl font-bold tracking-[0.35em] text-slate-200 mt-2">
             W M S
           </p>
-          <div className="mt-8 relative inline-block">
-            <div className="w-12 h-12 rounded-full border-2 border-dashed border-blue-400 flex items-center justify-center animate-spin-slow">
-              <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-            </div>
-          </div>
         </div>
 
         <div className="relative z-10">
@@ -129,7 +148,6 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
             )}
           </div>
         </div>
-
       </div>
 
       {/* ================= 2. RIGHT MAIN CONTENT AREA ================= */}
@@ -150,12 +168,11 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
           <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 min-h-[520px] flex flex-col justify-between">
             
             {viewMode === 'list' ? (
-              // ================= VIEW 1: RECEPTION TERMINAL (LIST + MANUAL SEARCH) =================
+              /* VIEW 1: RECEPTION TERMINAL LIST */
               <div>
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
                   <h3 className="text-lg font-black text-slate-900 tracking-wider shrink-0">RECEPTION TERMINAL</h3>
                   
-                  {/* กล่องค้นหาด้วยเลขใบเสร็จหรือชื่อบริษัท + ปุ่ม SCAN */}
                   <div className="flex items-center gap-2 w-full sm:w-auto">
                     <div className="relative flex-1 sm:w-72">
                       <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -164,11 +181,6 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
                         placeholder="ค้นหาเลขใบเสร็จ หรือ ชื่อบริษัท..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && filteredReceipts.length > 0) {
-                            handleSelectReceipt(filteredReceipts[0]);
-                          }
-                        }}
                         className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium focus:outline-none focus:border-indigo-600 focus:bg-white transition"
                       />
                     </div>
@@ -186,26 +198,33 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
                   <div className="w-8 h-8 rounded-xl bg-rose-100 text-rose-500 flex items-center justify-center shrink-0">
                     <Bell size={18} />
                   </div>
-                  <span className="text-sm font-semibold text-rose-500">Receipt Status</span>
+                  <span className="text-sm font-semibold text-rose-500">Receipt Status (Live MongoDB)</span>
                 </div>
 
-                {/* รายการใบเสร็จที่ผ่านการกรอง */}
+                {/* รายการใบเสร็จจาก DB */}
                 <div className="space-y-3 max-h-[380px] overflow-y-auto pr-2">
-                  {filteredReceipts.length > 0 ? (
+                  {loading ? (
+                    <div className="text-center py-12 text-slate-400 text-xs font-medium">
+                      กำลังโหลดรายการใบเสร็จ...
+                    </div>
+                  ) : filteredReceipts.length > 0 ? (
                     filteredReceipts.map((rec) => (
                       <div
-                        key={rec.id}
+                        key={rec._id || rec.id}
                         className="bg-white border border-slate-200 rounded-2xl px-6 py-4 flex items-center justify-between shadow-sm hover:border-indigo-400 hover:shadow-md transition"
                       >
                         <div>
                           <p className="font-bold text-slate-800 text-sm">
-                            RECEIPT {rec.id} <span className="text-slate-500 font-normal">[{rec.code}]</span>
+                            {rec.receiptId || `RECEIPT ${rec.id}`} <span className="text-slate-500 font-normal">[{rec.docNo}]</span>
                           </p>
                           <div className="flex items-center gap-1.5 text-xs text-indigo-600 font-semibold mt-0.5">
-                            <Building2 size={13} /> {rec.company}
+                            <Building2 size={13} /> {rec.company || 'Vendor Partner Co., Ltd.'}
                           </div>
                           <p className="text-[11px] text-slate-400 mt-0.5">
-                            Quantity : {rec.qtyItems} items
+                            Quantity : {rec.quantity || (rec.items ? rec.items.length : 0)} items | Status: {' '}
+                            <span className={rec.status === 'Confirmed' ? 'text-emerald-600 font-bold' : 'text-amber-600 font-bold'}>
+                              {rec.status || 'Pending'}
+                            </span>
                           </p>
                         </div>
                         <button
@@ -218,13 +237,13 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
                     ))
                   ) : (
                     <div className="text-center py-12 text-slate-400 text-xs">
-                      ไม่พบใบเสร็จที่ตรงกับคำค้นหา "{searchQuery}"
+                      ไม่พบใบเสร็จรับเข้าในระบบ
                     </div>
                   )}
                 </div>
               </div>
             ) : (
-              // ================= VIEW 2: RECEIPT DETAIL & SCAN CHECKLIST APPROVAL =================
+              /* VIEW 2: RECEIPT DETAIL & SCAN CHECKLIST */
               <div>
                 <div className="flex justify-between items-center mb-6">
                   <h3 className="text-lg font-black text-slate-900 tracking-wider">RECEPTION TERMINAL</h3>
@@ -241,11 +260,11 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
                     <Bell size={18} />
                   </div>
                   <span className="text-sm font-semibold text-rose-500">
-                    Scanning items in <span className="font-bold">RECEIPT {selectedReceipt?.id} [{selectedReceipt?.code}]</span> (<span className="text-indigo-600">{selectedReceipt?.company}</span>)
+                    Scanning items in <span className="font-bold">{selectedReceipt?.receiptId || selectedReceipt?.docNo}</span>
                   </span>
                 </div>
 
-                {/* Items Scan Checklist List */}
+                {/* Items Scan Checklist */}
                 <div className="space-y-3 max-h-[340px] overflow-y-auto pr-2 mb-6">
                   {currentReceiptItems.map((item, idx) => {
                     const isCompleted = item.qty === 0;
@@ -257,7 +276,6 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
                         }`}
                       >
                         <div className="flex items-center gap-4">
-                          {/* Status Icon */}
                           <div className={`w-6 h-6 rounded-lg border flex items-center justify-center transition ${
                             isCompleted ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-slate-300 bg-white text-slate-400'
                           }`}>
@@ -275,8 +293,6 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
 
                         <div className="flex items-center gap-3">
                           <span className="text-xs font-semibold text-slate-500">{item.weight}</span>
-                          
-                          {/* ปุ่ม Scan แยกแต่ละไอเทม (ลดจำนวนลงทีละ 1) */}
                           <button
                             onClick={(e) => handleScanItem(idx, e)}
                             disabled={isCompleted}
@@ -294,7 +310,7 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
                   })}
                 </div>
 
-                {/* Approve Button (Disabled until all items reach 0 qty) */}
+                {/* APPROVE BUTTON */}
                 <div className="flex justify-between items-center pt-2 border-t border-slate-100">
                   <span className="text-xs text-slate-500 font-medium">
                     Completed Items: {currentReceiptItems.filter(i => i.qty === 0).length} / {currentReceiptItems.length}

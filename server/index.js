@@ -14,7 +14,7 @@ const app = express();
 // Middlewares - ปรับแต่ง CORS ให้ครอบคลุมทุก Request
 app.use(cors({
   origin: '*', // หรือกำหนดเป็น 'http://localhost:5173' ตาม Port ของ Vite/React
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
