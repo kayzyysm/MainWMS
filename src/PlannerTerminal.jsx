@@ -1,66 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ChevronUp, Bell, ArrowLeft, Box, CheckCircle2, Layers, History, Clock, MapPin, Sparkles, Wrench, Building2 } from 'lucide-react';
-
-// Mock Data สินค้าที่มีจัดเก็บอยู่ใน Rack และ Slot ต่างๆ (ปรับให้แต่ละ Slot เก็บอาร์เรย์รายการสินค้า items ได้สูงสุด 4 ชนิด)
-const initialRackStorageData = {
-  'ZONE-A1': {
-    'Slot 1': {
-      items: [
-        { name: 'Logitech G Pro X Superlight', qty: 40, itemId: 'mock-1' },
-        { name: 'Keyboard RGB Gaming', qty: 30, itemId: 'mock-2' }
-      ]
-    },
-    'Slot 2': {
-      items: [
-        { name: 'Keyboard RGB Gaming', qty: 60, itemId: 'mock-2' }
-      ]
-    },
-    'Slot 5': {
-      items: [
-        { name: 'USB Hub 7-Port Type-C', qty: 100, itemId: 'mock-3' }
-      ]
-    },
-    'Slot 8': {
-      items: [
-        { name: 'RAM DDR5 32GB Kit', qty: 120, itemId: 'mock-4' }
-      ]
-    },
-  },
-  'ZONE-A2': {
-    'Slot 1': {
-      items: [
-        { name: 'Monitor ASUS TUF Gaming 27"', qty: 90, itemId: 'mock-5' }
-      ]
-    },
-    'Slot 3': {
-      items: [
-        { name: 'Graphics Card RTX 4060', qty: 120, itemId: 'mock-6' }
-      ]
-    },
-    'Slot 4': {
-      items: [
-        { name: 'Graphics Card RTX 4060', qty: 40, itemId: 'mock-6' }
-      ]
-    },
-  },
-  'ZONE-B1': {
-    'Slot 2': {
-      items: [
-        { name: 'Power Supply 850W', qty: 85, itemId: 'mock-7' }
-      ]
-    },
-    'Slot 6': {
-      items: [
-        { name: 'SSD NVMe 2TB', qty: 120, itemId: 'mock-8' }
-      ]
-    },
-  },
-  'ZONE-B2': {}
-};
 
 export default function PlannerTerminal({ currentUser, onLogout }) {
   const [viewMode, setViewMode] = useState('list');
   const [selectedReceipt, setSelectedReceipt] = useState(null);
+
+  // State เก็บรายการใบเสร็จจาก MongoDB (ที่ผ่าน Reception แล้ว)
+  const [plannerReceipts, setPlannerReceipts] = useState([]);
+  const [loadingReceipts, setLoadingReceipts] = useState(false);
 
   // State เก็บรายการสินค้าคงเหลือในใบเสร็จ
   const [remainingItems, setRemainingItems] = useState([]);
@@ -68,18 +15,19 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
   // State สำหรับสินค้าที่กำลังถูกเลือก
   const [selectedItemToStore, setSelectedItemToStore] = useState(null);
 
-  // State เก็บข้อมูล Slot ของแต่ละ Rack
-  const [rackStorage, setRackStorage] = useState(initialRackStorageData);
+  // State เก็บข้อมูล Slot ของแต่ละ Rack (ดึงจาก MongoDB)
+  const [rackStorage, setRackStorage] = useState({});
+  const [loadingRacks, setLoadingRacks] = useState(false);
 
   // State เก็บประวัติการจัดเก็บ (Activity Log)
   const [storageLogs, setStorageLogs] = useState([]);
 
-  // --- Modal 1: Smart Location Popup (เด้งทันทีที่คลิกสินค้า) ---
+  // --- Modal 1: Smart Location Popup ---
   const [isSmartModalOpen, setIsSmartModalOpen] = useState(false);
-  const [smartTargetLocation, setSmartTargetLocation] = useState(null); // { rackId, slotName, qty, availableSpace }
+  const [smartTargetLocation, setSmartTargetLocation] = useState(null);
   const [smartInputQty, setSmartInputQty] = useState(1);
 
-  // --- Modal 2: 9 Slots Inspection Popup (เมื่อเลือกจัด Manual แล้วกดคลิกที่ Rack) ---
+  // --- Modal 2: 9 Slots Inspection Popup ---
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [targetRackId, setTargetRackId] = useState(null);
   const [selectedSlotForAction, setSelectedSlotForAction] = useState(null);
@@ -89,23 +37,6 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
   const MAX_ITEMS_PER_SLOT = 4;    // จำนวนชนิดสินค้าสูงสุดต่อ slot
   const SLOTS_PER_RACK = 9;
   const MAX_RACK_CAPACITY = MAX_PALLET_CAPACITY * SLOTS_PER_RACK; // 1,080 ชิ้นต่อ Rack
-
-  const plannerReceipts = [
-    {
-      id: '1', code: 'WH-INV-342321', company: 'Logitech Thailand Co., Ltd.', qtyItems: 4, items: [
-        { id: 'item-1', name: 'Keyboard RGB Gaming', qty: 60, weight: '2.40 KG' },
-        { id: 'item-2', name: 'Logitech G Pro X Superlight', qty: 120, weight: '1.25 KG' },
-        { id: 'item-3', name: 'Monitor ASUS TUF Gaming 27"', qty: 5, weight: '6.50 KG' },
-        { id: 'item-4', name: 'USB Hub 7-Port Type-C', qty: 20, weight: '0.65 KG' }
-      ]
-    },
-    {
-      id: '2', code: 'WH-INV-442747', company: 'NVIDIA Enterprise Asia', qtyItems: 2, items: [
-        { id: 'item-5', name: 'Graphics Card RTX 4060', qty: 6, weight: '1.80 KG' },
-        { id: 'item-6', name: 'Power Supply 850W', qty: 10, weight: '3.10 KG' }
-      ]
-    }
-  ];
 
   const racks = [
     { id: 'ZONE-A1', name: 'Zone A-1 (Rack 1)' },
@@ -120,6 +51,56 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
     'Slot 7', 'Slot 8', 'Slot 9'
   ];
 
+  // 1. ดึงข้อมูลใบเสร็จจาก MongoDB (เฉพาะที่ได้รับการยืนยันหรือรอจัดเก็บตาม Flow จริง)
+  useEffect(() => {
+    const fetchReceipts = async () => {
+      try {
+        setLoadingReceipts(true);
+        const res = await fetch('http://localhost:5000/api/receipts');
+        if (res.ok) {
+          const data = await res.json();
+          // กรองเอาเฉพาะใบเสร็จที่ Reception กด Approve / Confirmed แล้วเท่านั้น
+          const confirmedReceipts = data.filter(rec => rec.status === 'Confirmed');
+          setPlannerReceipts(confirmedReceipts);
+        }
+      } catch (err) {
+        console.error('Failed to fetch receipts:', err);
+      } finally {
+        setLoadingReceipts(false);
+      }
+    };
+    fetchReceipts();
+  }, []);
+
+  // 2. ดึงข้อมูล Rack จาก MongoDB API (`/api/racks`)
+  useEffect(() => {
+    const fetchRacks = async () => {
+      try {
+        setLoadingRacks(true);
+        const res = await fetch('http://localhost:5000/api/racks');
+        if (res.ok) {
+          const data = await res.json();
+          // แปลงโครงสร้างข้อมูลจาก DB ให้แมตช์กับรูปแบบ rackStorage state
+          // สมมติโครงสร้างจาก /api/racks ส่งมาเป็นอาเรย์หรือออบเจ็กต์รหัส Rack
+          const formattedRacks = {};
+          if (Array.isArray(data)) {
+            data.forEach(r => {
+              formattedRacks[r.rackId || r.id] = r.slots || {};
+            });
+          } else if (typeof data === 'object' && data !== null) {
+            Object.assign(formattedRacks, data);
+          }
+          setRackStorage(formattedRacks);
+        }
+      } catch (err) {
+        console.error('Failed to fetch racks:', err);
+      } finally {
+        setLoadingRacks(false);
+      }
+    };
+    fetchRacks();
+  }, []);
+
   // คำนวณจำนวนชิ้นสินค้ารวมใน Slot
   const getSlotTotalQty = (slotData) => {
     if (!slotData || !slotData.items) return 0;
@@ -130,21 +111,23 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
   const getExistingLocationsForItem = (itemName) => {
     const locations = [];
     Object.entries(rackStorage).forEach(([rackId, slots]) => {
-      Object.entries(slots).forEach(([slotName, slotData]) => {
-        if (slotData && slotData.items) {
-          const foundItem = slotData.items.find(i => i.name === itemName);
-          if (foundItem) {
-            const totalQty = getSlotTotalQty(slotData);
-            locations.push({
-              rackId,
-              slotName,
-              qty: foundItem.qty,
-              totalSlotQty: totalQty,
-              availableSpace: MAX_PALLET_CAPACITY - totalQty
-            });
+      if (slots && typeof slots === 'object') {
+        Object.entries(slots).forEach(([slotName, slotData]) => {
+          if (slotData && slotData.items) {
+            const foundItem = slotData.items.find(i => i.name === itemName);
+            if (foundItem) {
+              const totalQty = getSlotTotalQty(slotData);
+              locations.push({
+                rackId,
+                slotName,
+                qty: foundItem.qty,
+                totalSlotQty: totalQty,
+                availableSpace: MAX_PALLET_CAPACITY - totalQty
+              });
+            }
           }
-        }
-      });
+        });
+      }
     });
     return locations;
   };
@@ -173,24 +156,27 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
 
   const handleOpenOrganize = (receipt) => {
     setSelectedReceipt(receipt);
-    setRemainingItems(receipt.items.map(i => ({ ...i })));
+    const formattedItems = (receipt.items || []).map((item, idx) => ({
+      id: item.id || `item-${idx}`,
+      name: item.productName || item.name,
+      qty: item.quantity || item.qty,
+      weight: `${item.totalWeight || item.weight || '0'} KG`
+    }));
+    setRemainingItems(formattedItems);
     setSelectedItemToStore(null);
     setStorageLogs([]);
     setViewMode('organize');
   };
 
-  // เมื่อผู้ใช้คลิกเลือกสินค้าจากฝั่งขวา -> เปิด Popup Smart Recommendation ทันที
   const handleSelectItem = (item) => {
     setSelectedItemToStore(item);
     setSmartTargetLocation(null);
-
-    // คำนวณจำนวนตั้งต้นที่จะใส่
     setSmartInputQty(Math.min(item.qty, MAX_PALLET_CAPACITY));
     setIsSmartModalOpen(true);
   };
 
-  // ฟังก์ชันส่วนกลางบันทึกสินค้าลง Slot (รองรับสินค้าหลายชนิดสูงสุด 4 ชนิด)
-  const executeStore = (rackId, slotName, qtyToStore) => {
+  // ฟังก์ชันบันทึกการจัดเก็บลงฐานข้อมูลผ่าน API
+  const executeStore = async (rackId, slotName, qtyToStore) => {
     const numQty = parseInt(qtyToStore);
     if (isNaN(numQty) || numQty <= 0) {
       alert('กรุณาระบุจำนวนให้ถูกต้อง');
@@ -207,26 +193,22 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
     const currentTotalQty = getSlotTotalQty(existingSlot);
 
     if (currentTotalQty + numQty > MAX_PALLET_CAPACITY) {
-      alert(`ความจุเกิน! Slot นี้จุได้สูงสุด ${MAX_PALLET_CAPACITY} ชิ้น (ปัจจุบันมี ${currentTotalQty} เติมได้อีก ${MAX_PALLET_CAPACITY - currentTotalQty} ชิ้น)`);
+      alert(`ความจุเกิน! Slot นี้จุได้สูงสุด ${MAX_PALLET_CAPACITY} ชิ้น`);
       return false;
     }
 
     const itemIndex = currentItems.findIndex(i => i.name === selectedItemToStore.name);
 
     if (itemIndex > -1) {
-      // มีสินค้านี้อยู่แล้วใน Slot ให้บวกจำนวนเพิ่ม
       currentItems[itemIndex] = {
         ...currentItems[itemIndex],
         qty: currentItems[itemIndex].qty + numQty
       };
     } else {
-      // เป็นสินค้าชนิดใหม่สำหรับ Slot นี้ Check เงื่อนไขห้ามเกิน 4 ชนิด
       if (currentItems.length >= MAX_ITEMS_PER_SLOT) {
-        alert(`Slot นี้วางสินค้าเต็มโควต้า ${MAX_ITEMS_PER_SLOT} ชนิดแล้ว! ไม่สามารถเพิ่มสินค้าประเภทอื่นได้อีก`);
+        alert(`Slot นี้วางสินค้าเต็มโควต้า ${MAX_ITEMS_PER_SLOT} ชนิดแล้ว!`);
         return false;
       }
-
-      // ใส่เป็นชนิดใหม่ (ต่อท้ายลำดับล่าสุด)
       currentItems.push({
         name: selectedItemToStore.name,
         qty: numQty,
@@ -234,14 +216,26 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
       });
     }
 
-    // อัปเดตข้อมูล Rack
     currentSlots[slotName] = { items: currentItems };
-    setRackStorage(prev => ({
-      ...prev,
+    const updatedRackStorage = {
+      ...rackStorage,
       [rackId]: currentSlots
-    }));
+    };
 
-    // บันทึก Log
+    // อัปเดตข้อมูล Rack ลง MongoDB ผ่าน API
+    try {
+      await fetch(`http://localhost:5000/api/racks/${rackId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slots: currentSlots })
+      });
+    } catch (err) {
+      console.error('Error updating rack in database:', err);
+    }
+
+    setRackStorage(updatedRackStorage);
+
+    // บันทึก Activity Log
     const newLog = {
       id: Date.now(),
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
@@ -267,25 +261,22 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
     return true;
   };
 
-  // ยืนยันการวางจาก Smart Modal
-  const handleConfirmSmartStore = () => {
+  const handleConfirmSmartStore = async () => {
     if (!smartTargetLocation) {
       alert('กรุณาเลือกตำแหน่งที่ต้องการจัดวางก่อนครับ');
       return;
     }
-    const success = executeStore(smartTargetLocation.rackId, smartTargetLocation.slotName, smartInputQty);
+    const success = await executeStore(smartTargetLocation.rackId, smartTargetLocation.slotName, smartInputQty);
     if (success) {
       setIsSmartModalOpen(false);
       setSmartTargetLocation(null);
     }
   };
 
-  // ปุ่มกดเพื่อเปลี่ยนไปจัดแบบ Manual (ปิด Popup ปัจจุบันแล้วให้ไปกด Rack เอง)
   const handleSwitchToManual = () => {
     setIsSmartModalOpen(false);
   };
 
-  // เมื่อคลิกที่ Rack จากหน้าหลัก (ทำงานเฉพาะกรณี Manual Organize)
   const handleRackClick = (rackId) => {
     if (!selectedItemToStore) {
       alert('⚠️ กรุณาคลิกเลือกสินค้าจากเมนูด้านขวาก่อนคลิกเลือก Rack');
@@ -310,26 +301,43 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
 
   const handleSelectSlotInModal = (slotName, slotData) => {
     setSelectedSlotForAction(slotName);
-
     const totalSlotQty = getSlotTotalQty(slotData);
     const remainingSpace = MAX_PALLET_CAPACITY - totalSlotQty;
     const defaultFill = Math.min(selectedItemToStore.qty, Math.max(0, remainingSpace));
     setInputQty(defaultFill);
   };
 
-  // ยืนยันการวางจาก 9-Slot Manual Modal
-  const confirmStoreToSlot = () => {
-    const success = executeStore(targetRackId, selectedSlotForAction, inputQty);
+  const confirmStoreToSlot = async () => {
+    const success = await executeStore(targetRackId, selectedSlotForAction, inputQty);
     if (success) {
       setSelectedSlotForAction(null);
       setIsModalOpen(false);
     }
   };
 
-  const handleApproveAll = () => {
-    alert(`อนุมัติและบันทึกการจัดเก็บใบเสร็จ ${selectedReceipt.code} เรียบร้อยแล้ว!`);
-    setViewMode('list');
-    setSelectedReceipt(null);
+  const handleApproveAll = async () => { // <--- เติม async ตรงนี้
+    try {
+      const res = await fetch(`http://localhost:5000/api/receipts/${selectedReceipt._id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'Ready to Pick' })
+      });
+
+      if (res.ok) {
+        alert(`อนุมัติและบันทึกการจัดเก็บใบเสร็จ ${selectedReceipt.docNo || selectedReceipt.receiptId} เรียบร้อยแล้ว!`);
+        setViewMode('list');
+        setSelectedReceipt(null);
+        // รีเฟรชรายการใบเสร็จ
+        const updatedRes = await fetch('http://localhost:5000/api/receipts');
+        if (updatedRes.ok) {
+          const data = await updatedRes.json();
+          setPlannerReceipts(data.filter(rec => rec.status === 'Confirmed'));
+        }
+      }
+    } catch (err) {
+      console.error('Error finishing receipt storage:', err);
+      alert('ไม่สามารถบันทึกสถานะลงฐานข้อมูลได้');
+    }
   };
 
   const isAllStored = remainingItems.length === 0;
@@ -379,7 +387,7 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
             <div>
               <h2 className="text-2xl font-serif tracking-wide">Warehouse Automation System</h2>
               <p className="text-[11px] text-slate-400 tracking-[0.2em] uppercase mt-0.5">
-                ROLE: Planner {currentUser?.username || 'PN001'}
+                ROLE: Planner {currentUser?.username || 'PN001'} (Live MongoDB)
               </p>
             </div>
           </div>
@@ -394,26 +402,32 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
                 <div className="w-8 h-8 rounded-xl bg-rose-100 text-rose-500 flex items-center justify-center shrink-0">
                   <Bell size={18} />
                 </div>
-                <span className="text-sm font-semibold text-rose-500">Receipt Status - Pending Organization</span>
+                <span className="text-sm font-semibold text-rose-500">Receipt Status - Ready for Putaway</span>
               </div>
 
-              <div className="space-y-3">
-                {plannerReceipts.map((rec) => (
-                  <div key={rec.id} className="bg-white border border-slate-200 rounded-2xl px-6 py-4 flex items-center justify-between shadow-sm hover:border-indigo-400 hover:shadow-md transition">
-                    <div>
-                      <p className="font-bold text-slate-800 text-sm">
-                        RECEIPT {rec.id} <span className="text-slate-500 font-normal">[{rec.code}]</span>
-                      </p>
-                      <div className="flex items-center gap-1.5 text-xs text-indigo-600 font-semibold mt-0.5">
-                        <Building2 size={13} /> {rec.company}
+              <div className="space-y-3 max-h-[380px] overflow-y-auto pr-1">
+                {loadingReceipts ? (
+                  <div className="text-center py-12 text-slate-400 text-xs font-medium">กำลังโหลดใบเสร็จจากฐานข้อมูล...</div>
+                ) : plannerReceipts.length > 0 ? (
+                  plannerReceipts.map((rec) => (
+                    <div key={rec._id || rec.id} className="bg-white border border-slate-200 rounded-2xl px-6 py-4 flex items-center justify-between shadow-sm hover:border-indigo-400 hover:shadow-md transition">
+                      <div>
+                        <p className="font-bold text-slate-800 text-sm">
+                          {rec.receiptId || `RECEIPT`} <span className="text-slate-500 font-normal">[{rec.docNo}]</span>
+                        </p>
+                        <div className="flex items-center gap-1.5 text-xs text-indigo-600 font-semibold mt-0.5">
+                          <Building2 size={13} /> {rec.company || 'Vendor Partner'}
+                        </div>
+                        <p className="text-[11px] text-slate-400 mt-0.5">Quantity : {rec.quantity || rec.items?.length || 0} items | Status: <b className="text-amber-600">{rec.status}</b></p>
                       </div>
-                      <p className="text-[11px] text-slate-400 mt-0.5">Quantity : {rec.qtyItems} items</p>
+                      <button onClick={() => handleOpenOrganize(rec)} className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-6 py-2.5 rounded-xl transition shadow">
+                        Organize
+                      </button>
                     </div>
-                    <button onClick={() => handleOpenOrganize(rec)} className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-6 py-2.5 rounded-xl transition shadow">
-                      Organize
-                    </button>
-                  </div>
-                ))}
+                  ))
+                ) : (
+                  <div className="text-center py-12 text-slate-400 text-xs">ไม่มีใบเสร็จที่รอการจัดเก็บในขณะนี้</div>
+                )}
               </div>
             </div>
           ) : (
@@ -425,14 +439,13 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
                   <div className="flex justify-between items-center mb-4">
                     <div className="flex items-center gap-2">
                       <span className="w-3 h-3 bg-indigo-600 rounded-full inline-block"></span>
-                      <h3 className="font-bold text-slate-800 text-sm">3D WAREHOUSE MODEL</h3>
+                      <h3 className="font-bold text-slate-800 text-sm">3D WAREHOUSE MODEL (Live DB)</h3>
                     </div>
                     <button onClick={() => setViewMode('list')} className="bg-slate-900 text-white text-xs px-4 py-2 rounded-xl font-bold hover:bg-slate-800 transition flex items-center gap-1.5">
                       <ArrowLeft size={14} /> Back to List
                     </button>
                   </div>
 
-                  {/* Manual Mode Banner */}
                   {selectedItemToStore && !isSmartModalOpen && (
                     <div className="bg-amber-50 border border-amber-300 rounded-xl p-3 mb-4 flex items-center justify-between text-xs text-amber-800 font-semibold animate-pulse">
                       <span>📌 โหมดจัดวางด้วยตนเอง (Manual): เลือกคลิกที่ Rack เพื่อดู 9 Slots ของสินค้า <b>{selectedItemToStore.name}</b></span>
@@ -461,24 +474,21 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
                           key={rack.id}
                           onClick={() => handleRackClick(rack.id)}
                           className={`w-[47%] rounded-2xl border-2 p-4 flex flex-col justify-between transition cursor-pointer relative z-10 shadow-lg ${selectedItemToStore
-                              ? 'border-indigo-400 bg-slate-800/90 hover:bg-indigo-950/60 ring-2 ring-indigo-500/50'
-                              : metrics.filledSlotsCount > 0
-                                ? 'border-slate-700 bg-slate-800/90 hover:border-indigo-400'
-                                : 'border-slate-800 bg-slate-900/60 hover:border-slate-600'
+                            ? 'border-indigo-400 bg-slate-800/90 hover:bg-indigo-950/60 ring-2 ring-indigo-500/50'
+                            : metrics.filledSlotsCount > 0
+                              ? 'border-slate-700 bg-slate-800/90 hover:border-indigo-400'
+                              : 'border-slate-800 bg-slate-900/60 hover:border-slate-600'
                             }`}
                         >
-                          {/* Rack Header */}
                           <div className="flex justify-between items-center mb-3">
                             <span className="text-xs font-bold text-white bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800">
                               {rack.name}
                             </span>
-
                             <span className={`text-[11px] px-2.5 py-0.5 rounded-full font-black border ${statusBadgeColor}`}>
                               {metrics.percent}% Full
                             </span>
                           </div>
 
-                          {/* Progress Bar & Details */}
                           <div className="space-y-2 my-1">
                             <div className="flex justify-between text-[11px] text-slate-300 font-semibold">
                               <span>Capacity ({metrics.totalStoredQty}/{MAX_RACK_CAPACITY} pcs)</span>
@@ -545,7 +555,7 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
                     <Box className="w-5 h-5 text-indigo-600" />
                     <div>
                       <h3 className="font-black text-slate-800 text-sm">RECEIPT ITEMS</h3>
-                      <p className="text-[11px] text-indigo-600 font-bold">{selectedReceipt?.code} <span className="text-slate-500 font-normal">({selectedReceipt?.company})</span></p>
+                      <p className="text-[11px] text-indigo-600 font-bold">{selectedReceipt?.docNo || selectedReceipt?.receiptId}</p>
                     </div>
                   </div>
 
@@ -564,8 +574,8 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
                             key={item.id}
                             onClick={() => handleSelectItem(item)}
                             className={`border rounded-2xl p-3.5 transition cursor-pointer shadow-sm ${isSelected
-                                ? 'border-indigo-500 bg-indigo-50 ring-2 ring-indigo-400'
-                                : 'border-slate-200 bg-slate-50 hover:border-slate-300'
+                              ? 'border-indigo-500 bg-indigo-50 ring-2 ring-indigo-400'
+                              : 'border-slate-200 bg-slate-50 hover:border-slate-300'
                               }`}
                           >
                             <div className="flex justify-between items-start mb-1">
@@ -588,8 +598,8 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
                     onClick={handleApproveAll}
                     disabled={!isAllStored}
                     className={`w-full py-3 rounded-xl font-bold shadow-lg transition text-sm flex items-center justify-center gap-2 ${isAllStored
-                        ? 'bg-emerald-500 hover:bg-emerald-600 text-white cursor-pointer transform hover:scale-105'
-                        : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
+                      ? 'bg-emerald-500 hover:bg-emerald-600 text-white cursor-pointer transform hover:scale-105'
+                      : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
                       }`}
                   >
                     <CheckCircle2 size={16} /> APPROVE
@@ -603,14 +613,10 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
         </div>
       </div>
 
-      {/* ------------------------------------------------------------- */}
-      {/* 3. POPUP MODAL 1: SMART LOCATION RECOMMENDATION (เด้งทันทีที่กดสินค้า) */}
-      {/* ------------------------------------------------------------- */}
+      {/* 3. POPUP MODAL 1: SMART LOCATION RECOMMENDATION */}
       {isSmartModalOpen && selectedItemToStore && (
         <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-6 w-[560px] shadow-2xl border border-slate-200 animate-fade-in flex flex-col">
-
-            {/* Header */}
             <div className="flex justify-between items-start mb-4 pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center">
@@ -621,12 +627,9 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
                   <p className="text-xs text-indigo-600 font-bold">{selectedItemToStore.name} (คงเหลือ {selectedItemToStore.qty} ชิ้น)</p>
                 </div>
               </div>
-              <button onClick={() => setIsSmartModalOpen(false)} className="text-slate-400 hover:text-slate-600 font-bold px-2 py-1">
-                ✕
-              </button>
+              <button onClick={() => setIsSmartModalOpen(false)} className="text-slate-400 hover:text-slate-600 font-bold px-2 py-1">✕</button>
             </div>
 
-            {/* Existing Locations Display */}
             <div className="my-2">
               <p className="text-xs font-bold text-slate-700 mb-2.5 flex items-center gap-1.5">
                 <MapPin size={14} className="text-indigo-600" /> ตำแหน่งปัจจุบันของสินค้านี้ในคลัง:
@@ -658,23 +661,20 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
                             }
                           }}
                           className={`p-3.5 border-2 rounded-2xl flex items-center justify-between transition ${isFull
-                              ? 'bg-slate-100 border-slate-200 opacity-60 cursor-not-allowed'
-                              : isSelectedLoc
-                                ? 'bg-indigo-50 border-indigo-600 ring-2 ring-indigo-300 cursor-pointer'
-                                : 'bg-white border-slate-200 hover:border-indigo-400 cursor-pointer shadow-sm'
+                            ? 'bg-slate-100 border-slate-200 opacity-60 cursor-not-allowed'
+                            : isSelectedLoc
+                              ? 'bg-indigo-50 border-indigo-600 ring-2 ring-indigo-300 cursor-pointer'
+                              : 'bg-white border-slate-200 hover:border-indigo-400 cursor-pointer shadow-sm'
                             }`}
                         >
                           <div>
-                            <p className="font-bold text-xs text-slate-800">
-                              {loc.rackId} — <span className="text-indigo-600">{loc.slotName}</span>
-                            </p>
+                            <p className="font-bold text-xs text-slate-800">{loc.rackId} — <span className="text-indigo-600">{loc.slotName}</span></p>
                             <p className="text-[11px] text-slate-500 mt-0.5">
-                              มีสินค้านี้อยู่แล้ว: <b>{loc.qty}</b> ชิ้น (รวมใน Slot: {loc.totalSlotQty}/{MAX_PALLET_CAPACITY} ชิ้น) {isFull ? '(เต็มแล้ว)' : `(ว่างอีก ${loc.availableSpace} ชิ้น)`}
+                              มีสินค้านี้อยู่แล้ว: <b>{loc.qty}</b> ชิ้น {isFull ? '(เต็มแล้ว)' : `(ว่างอีก ${loc.availableSpace} ชิ้น)`}
                             </p>
                           </div>
-                          <span className={`text-[10px] font-bold px-3 py-1 rounded-xl ${isSelectedLoc ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'
-                            }`}>
-                            {isSelectedLoc ? 'เลือกอยู่' : 'คลิกเพื่อเลือกวางตรงนี้'}
+                          <span className={`text-[10px] font-bold px-3 py-1 rounded-xl ${isSelectedLoc ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                            {isSelectedLoc ? 'เลือกอยู่' : 'คลิกเลือก'}
                           </span>
                         </div>
                       );
@@ -684,14 +684,9 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
               })()}
             </div>
 
-            {/* Input Qty if location selected */}
             {smartTargetLocation && (
               <div className="mt-3 p-4 bg-indigo-50/60 border border-indigo-200 rounded-2xl">
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-xs font-bold text-slate-800">
-                    ระบุจำนวนที่จะวางที่ {smartTargetLocation.rackId} ({smartTargetLocation.slotName}):
-                  </span>
-                </div>
+                <p className="text-xs font-bold text-slate-800 mb-2">ระบุจำนวนที่จะวางที่ {smartTargetLocation.rackId} ({smartTargetLocation.slotName}):</p>
                 <input
                   type="number"
                   min="1"
@@ -703,53 +698,34 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
               </div>
             )}
 
-            {/* Action Buttons */}
             <div className="mt-5 pt-3 border-t border-slate-100 flex items-center justify-between gap-3">
-              <button
-                onClick={handleSwitchToManual}
-                className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-4 py-2.5 rounded-xl text-xs transition flex items-center gap-1.5"
-              >
+              <button onClick={handleSwitchToManual} className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-4 py-2.5 rounded-xl text-xs transition flex items-center gap-1.5">
                 <Wrench size={14} /> จัดด้วยตนเอง (Manual)
               </button>
-
               <button
                 onClick={handleConfirmSmartStore}
                 disabled={!smartTargetLocation}
-                className={`font-bold px-6 py-2.5 rounded-xl text-xs transition shadow ${smartTargetLocation
-                    ? 'bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer'
-                    : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
-                  }`}
+                className={`font-bold px-6 py-2.5 rounded-xl text-xs transition shadow ${smartTargetLocation ? 'bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer' : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'}`}
               >
                 ยืนยันการจัดเก็บ
               </button>
             </div>
-
           </div>
         </div>
       )}
 
-      {/* ------------------------------------------------------------- */}
-      {/* 4. POPUP MODAL 2: INSPECTING 9 SLOTS (แสดงรายการสินค้าได้สูงสุด 4 ชนิดต่อ Slot) */}
-      {/* ------------------------------------------------------------- */}
+      {/* 4. POPUP MODAL 2: INSPECTING 9 SLOTS */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-6 w-[780px] shadow-2xl border border-slate-200 max-h-[90vh] flex flex-col">
-
             <div className="flex justify-between items-start mb-3 pb-3 border-b border-slate-100">
               <div>
-                <h3 className="font-black text-slate-800 text-base">
-                  ตรวจสอบ 9 Slot ของ Rack: <span className="text-indigo-600">{targetRackId}</span>
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  กำลังวาง: <b className="text-slate-800">{selectedItemToStore?.name}</b> (เหลืออีก {selectedItemToStore?.qty} ชิ้น) — <span className="text-indigo-600">จำกัดสูงสุด 4 ชนิด/Slot</span>
-                </p>
+                <h3 className="font-black text-slate-800 text-base">ตรวจสอบ 9 Slot ของ Rack: <span className="text-indigo-600">{targetRackId}</span></h3>
+                <p className="text-xs text-slate-500 mt-0.5">กำลังวาง: <b className="text-slate-800">{selectedItemToStore?.name}</b></p>
               </div>
-              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 font-bold px-2 py-1">
-                ✕
-              </button>
+              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 font-bold px-2 py-1">✕</button>
             </div>
 
-            {/* Grid 9 Slots (รองรับสูงสุด 4 ชนิดต่อ Slot) */}
             <div className="grid grid-cols-3 gap-3 my-2 overflow-y-auto pr-1">
               {rackSlots.map((slotName) => {
                 const slotData = currentSlotsData[slotName] || { items: [] };
@@ -768,90 +744,60 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
                     key={slotName}
                     onClick={() => !isDisabled && handleSelectSlotInModal(slotName, slotData)}
                     className={`border-2 rounded-2xl p-3 transition flex flex-col justify-between min-h-[140px] relative ${isDisabled
-                        ? 'bg-slate-100 border-slate-300 opacity-60 cursor-not-allowed'
-                        : isSelectedThisSlot
-                          ? 'border-indigo-600 bg-indigo-50/80 ring-2 ring-indigo-400 shadow-md cursor-pointer'
-                          : isOccupied
-                            ? 'border-blue-300 bg-blue-50/30 hover:border-blue-400 cursor-pointer'
-                            : 'border-slate-200 bg-slate-50 hover:border-indigo-400 cursor-pointer'
+                      ? 'bg-slate-100 border-slate-300 opacity-60 cursor-not-allowed'
+                      : isSelectedThisSlot
+                        ? 'border-indigo-600 bg-indigo-50/80 ring-2 ring-indigo-400 shadow-md cursor-pointer'
+                        : isOccupied
+                          ? 'border-blue-300 bg-blue-50/30 hover:border-blue-400 cursor-pointer'
+                          : 'border-slate-200 bg-slate-50 hover:border-indigo-400 cursor-pointer'
                       }`}
                   >
-                    {/* Header Slot */}
                     <div className="flex justify-between items-center mb-1 pb-1 border-b border-slate-200/60">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-bold text-xs text-slate-800">{slotName}</span>
-                        <span className="text-[10px] text-slate-400">({itemsList.length}/4 Types)</span>
-                      </div>
-                      <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold ${isFullSpace ? 'bg-slate-400 text-white' : isOccupied ? 'bg-indigo-600 text-white' : 'bg-emerald-500 text-white'
-                        }`}>
+                      <span className="font-bold text-xs text-slate-800">{slotName}</span>
+                      <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold ${isFullSpace ? 'bg-slate-400 text-white' : 'bg-indigo-600 text-white'}`}>
                         {totalSlotQty}/{MAX_PALLET_CAPACITY} pcs
                       </span>
                     </div>
 
-                    {/* รายการสินค้าย่อยที่มีอยู่ (สูงสุด 4 รายการ) */}
-                    <div className="my-1.5 space-y-1 flex-1 max-h-[85px] overflow-y-auto pr-1 custom-scrollbar">
+                    <div className="my-1.5 space-y-1 flex-1 max-h-[85px] overflow-y-auto pr-1">
                       {!isOccupied ? (
                         <p className="text-slate-400 italic text-center text-[11px] py-4">Slot ว่าง</p>
                       ) : (
-                        itemsList.slice(0, MAX_ITEMS_PER_SLOT).map((item, idx) => (
+                        itemsList.map((item, idx) => (
                           <div key={idx} className="flex justify-between items-center bg-white/70 px-2 py-0.5 rounded border border-slate-200/80 text-[10px]">
-                            <span className="font-medium text-slate-700 truncate max-w-[120px]" title={item.name}>
-                              • {item.name}
-                            </span>
+                            <span className="font-medium text-slate-700 truncate max-w-[120px]">• {item.name}</span>
                             <span className="font-bold text-indigo-600 shrink-0 ml-1">{item.qty} ชิ้น</span>
                           </div>
                         ))
                       )}
                     </div>
 
-                    {/* Mini Slot Capacity Bar */}
                     <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden mt-1">
-                      <div
-                        className={`h-full ${isFullSpace ? 'bg-slate-500' : 'bg-indigo-600'}`}
-                        style={{ width: `${slotPercent}%` }}
-                      />
+                      <div className="h-full bg-indigo-600" style={{ width: `${slotPercent}%` }} />
                     </div>
                   </div>
                 );
               })}
             </div>
 
-            {/* Input Form for Slot */}
             {selectedSlotForAction && (
-              <div className="bg-slate-50 border border-indigo-200 rounded-2xl p-4 mt-2 animate-fade-in">
-                <div className="flex justify-between items-center mb-2">
-                  <p className="text-xs font-bold text-slate-800">
-                    เลือก: <span className="text-indigo-600">{selectedSlotForAction}</span> ({currentSlotsData[selectedSlotForAction]?.items?.some(i => i.name === selectedItemToStore?.name) ? 'เติมสินค้าเดิม' : 'เพิ่มสินค้าชนิดใหม่ลง Slot'})
-                  </p>
-                </div>
-
+              <div className="bg-slate-50 border border-indigo-200 rounded-2xl p-4 mt-2">
+                <p className="text-xs font-bold text-slate-800 mb-2">เลือก: <span className="text-indigo-600">{selectedSlotForAction}</span></p>
                 <div className="flex gap-3 items-center">
-                  <div className="flex-1">
-                    <input
-                      type="number"
-                      min="1"
-                      max={Math.min(
-                        selectedItemToStore?.qty || 0,
-                        MAX_PALLET_CAPACITY - getSlotTotalQty(currentSlotsData[selectedSlotForAction])
-                      )}
-                      value={inputQty}
-                      onChange={(e) => setInputQty(e.target.value)}
-                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-indigo-500"
-                    />
-                  </div>
+                  <input
+                    type="number"
+                    min="1"
+                    max={Math.min(selectedItemToStore?.qty || 0, MAX_PALLET_CAPACITY - getSlotTotalQty(currentSlotsData[selectedSlotForAction]))}
+                    value={inputQty}
+                    onChange={(e) => setInputQty(e.target.value)}
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-indigo-500"
+                  />
                   <button onClick={confirmStoreToSlot} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-6 py-2 rounded-xl text-xs transition shadow">
-                    ยืนยันการจัดเก็บ
+                    ยืนยัน
                   </button>
                 </div>
               </div>
             )}
-
-            <div className="mt-3 pt-2 border-t border-slate-100 flex justify-end">
-              <button onClick={() => setIsModalOpen(false)} className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-5 py-2 rounded-xl text-xs">
-                ปิดหน้าต่าง
-              </button>
-            </div>
-
           </div>
         </div>
       )}

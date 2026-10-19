@@ -13,14 +13,17 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
   // State สำหรับเช็คลิสต์รายการสินค้าของใบเสร็จที่เลือก
   const [currentReceiptItems, setCurrentReceiptItems] = useState([]);
 
-  // 1. ดึงรายการใบเสร็จทั้งหมดจาก MongoDB ผ่าน API
+  // 1. ดึงรายการใบเสร็จทั้งหมดจาก MongoDB ผ่าน API (กรองเฉพาะ Pending สำหรับหน้า Reception)
   const fetchReceipts = async () => {
     try {
       setLoading(true);
       const res = await fetch('http://localhost:5000/api/receipts');
       if (res.ok) {
         const data = await res.json();
-        setReceipts(data);
+        // แสดงเฉพาะใบเสร็จที่ยังรอการตรวจสอบรับเข้า (Pending) หรือทั้งหมดตามต้องการ
+        // ในที่นี้กรองเฉพาะ Pending เพื่อให้ Reception จัดการเฉพาะงานตัวเอง
+        const pendingReceipts = data.filter(rec => rec.status === 'Pending' || !rec.status);
+        setReceipts(pendingReceipts);
       }
     } catch (err) {
       console.error('Failed to fetch receipts:', err);
@@ -93,7 +96,7 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
       });
 
       if (res.ok) {
-        alert(`อนุมัติใบเสร็จ ${selectedReceipt.docNo} เรียบร้อยแล้ว! ส่งข้อมูลเข้าคลังสำเร็จ`);
+        alert(`อนุมัติใบเสร็จ ${selectedReceipt.docNo || selectedReceipt.receiptId} เรียบร้อยแล้ว! ส่งข้อมูลเข้าคลังสำเร็จ`);
         await fetchReceipts(); // ดึงข้อมูลล่าสุดมาอัปเดตหน้าจอ
         setViewMode('list');
         setSelectedReceipt(null);
@@ -198,7 +201,7 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
                   <div className="w-8 h-8 rounded-xl bg-rose-100 text-rose-500 flex items-center justify-center shrink-0">
                     <Bell size={18} />
                   </div>
-                  <span className="text-sm font-semibold text-rose-500">Receipt Status (Live MongoDB)</span>
+                  <span className="text-sm font-semibold text-rose-500">Receipt Status - Pending Inspection (Live MongoDB)</span>
                 </div>
 
                 {/* รายการใบเสร็จจาก DB */}
@@ -215,14 +218,14 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
                       >
                         <div>
                           <p className="font-bold text-slate-800 text-sm">
-                            {rec.receiptId || `RECEIPT ${rec.id}`} <span className="text-slate-500 font-normal">[{rec.docNo}]</span>
+                            {rec.receiptId || `RECEIPT`} <span className="text-slate-500 font-normal">[{rec.docNo}]</span>
                           </p>
                           <div className="flex items-center gap-1.5 text-xs text-indigo-600 font-semibold mt-0.5">
                             <Building2 size={13} /> {rec.company || 'Vendor Partner Co., Ltd.'}
                           </div>
                           <p className="text-[11px] text-slate-400 mt-0.5">
                             Quantity : {rec.quantity || (rec.items ? rec.items.length : 0)} items | Status: {' '}
-                            <span className={rec.status === 'Confirmed' ? 'text-emerald-600 font-bold' : 'text-amber-600 font-bold'}>
+                            <span className="text-amber-600 font-bold">
                               {rec.status || 'Pending'}
                             </span>
                           </p>
@@ -237,7 +240,7 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
                     ))
                   ) : (
                     <div className="text-center py-12 text-slate-400 text-xs">
-                      ไม่พบใบเสร็จรับเข้าในระบบ
+                      ไม่พบใบเสร็จรับเข้าที่รอตรวจสอบ (Pending) ในระบบ
                     </div>
                   )}
                 </div>
@@ -251,7 +254,7 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
                     onClick={() => { setViewMode('list'); setSelectedReceipt(null); }}
                     className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-xl font-bold shadow-md transition cursor-pointer flex items-center gap-2 text-xs"
                   >
-                    RECEIPT DOC
+                    <ArrowLeft size={14} /> Back to List
                   </button>
                 </div>
 

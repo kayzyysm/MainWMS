@@ -24,19 +24,25 @@ router.post('/', async (req, res) => {
   }
 });
 
-// PUT /api/racks/:rackId/slot - อัปเดตสินค้าใน Slot (รองรับ Putaway / Pick)
-router.put('/:rackId/slot', async (req, res) => {
+// PUT /api/racks/:rackId - อัปเดตข้อมูล Slots ของ Rack เมื่อมีการจัดเก็บสินค้า (Putaway)
+router.put('/:rackId', async (req, res) => {
   try {
     const { rackId } = req.params;
-    const { slotKey, items } = req.body; // items คือ array ของ { itemId, name, qty }
+    const { slots } = req.body; // รับค่า slots ทั้งก้อนที่ส่งมาจากหน้า PlannerTerminal
 
     const rack = await Rack.findOne({ rackId });
-    if (!rack) return res.status(404).json({ message: 'ไม่พบตู้ Rack' });
+    if (!rack) {
+      return res.status(404).json({ message: 'ไม่พบตู้ Rack' });
+    }
 
-    // อัปเดต Slot ใน Map
-    rack.slots.set(slotKey, { slotName: slotKey, items });
+    // วนลูปอัปเดตค่าลงใน Mongoose Map ของ slots ทีละช่อง
+    if (slots && typeof slots === 'object') {
+      for (const [key, value] of Object.entries(slots)) {
+        rack.slots.set(key, value);
+      }
+    }
+
     await rack.save();
-
     res.json({ message: 'อัปเดตตำแหน่งจัดเก็บสำเร็จ', rack });
   } catch (error) {
     res.status(500).json({ error: error.message });

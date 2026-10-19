@@ -2,10 +2,10 @@ const express = require('express');
 const router = express.Router();
 const Receipt = require('../models/Receipt');
 
+// GET /api/receipts -> ดึงรายการใบเสร็จทั้งหมด (เอาเงื่อนไข status ออก เพื่อให้ Planner เอาไปกรองต่อได้)
 router.get('/', async (req, res) => {
   try {
-    // กรองเอาเฉพาะ status: 'Pending'
-    const receipts = await Receipt.find({ status: 'Pending' }).sort({ createdAt: -1 });
+    const receipts = await Receipt.find({}).sort({ createdAt: -1 });
     res.json(receipts);
   } catch (err) {
     res.status(500).json({ message: 'Error fetching receipts', error: err.message });
@@ -23,7 +23,7 @@ router.post('/', async (req, res) => {
   }
 });
 
-// PATCH /api/receipts/:id/status -> อัปเดตสถานะใบเสร็จ (เช่น เป็น 'Confirmed')
+// PATCH /api/receipts/:id/status -> อัปเดตสถานะใบเสร็จ (เช่น เป็น 'Confirmed' หรือ 'Stored')
 router.patch('/:id/status', async (req, res) => {
   try {
     const { status } = req.body;
