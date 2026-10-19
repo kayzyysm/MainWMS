@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, Box, Text } from '@react-three/drei';
 import gsap from 'gsap';
-import { LayoutDashboard, RotateCcw, Package, Layers, ChevronUp } from 'lucide-react';
+import { LayoutDashboard, RotateCcw, Package, Layers, ChevronUp, RefreshCcw } from 'lucide-react';
+import { getRacks } from './services/api'; // ปรับ path ตามโครงสร้างโปรเจกต์ของคุณ
 
 // 1. คอมโพเนนต์กล่องสินค้าพร้อมเอฟเฟกต์กระพริบ
 function BlinkingSlotBox({ args, position, color, isSelected, onClick, status }) {
@@ -37,9 +38,9 @@ function Rack({ position, name, slots, onSlotClick, onClick, selectedSlotId }) {
 
   const getSlotColor = (status) => {
     switch (status) {
-      case 'Critical': return '#ef4444';
-      case 'Occupied': return '#3b82f6';
-      default: return '#3b82f6';
+      case 'Critical': return '#ef4444'; // สีแดง
+      case 'Occupied': return '#3b82f6'; // สีน้ำเงิน
+      default: return '#94a3b8';         // สีเทาโปร่งสำหรับพื้นที่ว่าง
     }
   };
 
@@ -98,98 +99,128 @@ function SceneManager({ viewMode }) {
 
   useEffect(() => {
     if (viewMode === 'focus') {
-      gsap.to(camera.position, { x: 0, y: 2.5, z: 4.5, duration: 1.5, ease: "power2.inOut" });
+      gsap.to(camera.position, { x: 0, y: 2.5, z: 4.5, duration: 1.2, ease: "power2.inOut" });
     } else {
-      gsap.to(camera.position, { x: 6, y: 8, z: 8, duration: 1.5, ease: "power2.inOut" });
+      gsap.to(camera.position, { x: 6, y: 8, z: 8, duration: 1.2, ease: "power2.inOut" });
     }
   }, [viewMode, camera]);
 
   return null;
 }
 
-// 4. Main Admin Warehouse Dashboard Component
+// 4. Main Admin Warehouse Dashboard Component (เชื่อมต่อ MongoDB จริง)
 export default function WarehouseDashboard({ currentUser, onLogout }) {
   const [viewMode, setViewMode] = useState('overview');
   const [selectedRack, setSelectedRack] = useState(null);
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [managerSearch, setManagerSearch] = useState('');
 
-  // ฟังก์ชันช่วยคำนวณ status อัตโนมัติ: ถ้า qty < 10 ให้เป็น 'Critical' (แดง) นอกนั้นเป็น 'Occupied' (น้ำเงิน)
-  const createSlots = (baseSlots) => {
-    return baseSlots.map(slot => ({
-      ...slot,
-      status: slot.qty < 10 ? 'Critical' : 'Occupied'
-    }));
+  const [racks, setRacks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState('');
+
+  const abortControllerRef = useRef(null);
+  const viewModeRef = useRef(viewMode); // ใช้เก็บค่า viewMode ปัจจุบันป้องกันปัญหา Closure ใน setInterval
+
+  // อัปเดตค่า ref ทุกครั้งที่ viewMode เปลี่ยน
+  useEffect(() => {
+    viewModeRef.current = viewMode;
+  }, [viewMode]);
+
+  const memoizedRacks = React.useMemo(() => racks, [racks]);
+
+  // 1. ฟังก์ชันดึงข้อมูลแบบ Real-Time จาก MongoDB Atlas
+  const fetchRacksFromAPI = async (isInitial = false) => {
+    try {
+      if (isInitial) setLoading(true);
+
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      abortControllerRef.current = new AbortController();
+
+      const response = await getRacks({
+        signal: abortControllerRef.current.signal
+      });
+
+      const formattedRacks = response.data.map(rack => {
+        let rawSlots = rack.slots;
+
+        const slotsArray = Array.from({ length: 9 }, (_, index) => {
+          const slotKeyNum = index + 1;
+          
+          let slotData = null;
+          if (rawSlots) {
+            const foundKey = Object.keys(rawSlots).find(k =>
+              k.toLowerCase() === `slot ${slotKeyNum}` ||
+              k.toLowerCase() === `slot${slotKeyNum}` ||
+              k.toLowerCase() === `s${slotKeyNum}`
+            );
+            if (foundKey) {
+              slotData = rawSlots[foundKey];
+            }
+          }
+
+          let itemName = 'พื้นที่ว่าง';
+          let itemQty = 0;
+
+          if (slotData) {
+            if (slotData.items && Array.isArray(slotData.items) && slotData.items.length > 0) {
+              itemName = slotData.items[0].name || slotData.items[0].item || 'สินค้า';
+              itemQty = slotData.items[0].qty ?? 0;
+            } else if (slotData.item || slotData.itemName) {
+              itemName = slotData.item || slotData.itemName;
+              itemQty = slotData.qty ?? 0;
+            } else if (slotData.qty > 0) {
+              itemQty = slotData.qty;
+              itemName = 'สินค้าในสต็อก';
+            }
+          }
+
+          let slotStatus = 'Empty';
+          if (itemQty > 0 || itemName !== 'พื้นที่ว่าง') {
+            slotStatus = itemQty < 10 ? 'Critical' : 'Occupied';
+          }
+
+          return {
+            id: `${rack.rackId || rack.id}-S${slotKeyNum}`,
+            slotNumber: slotKeyNum,
+            item: itemName,
+            qty: itemQty,
+            status: slotStatus
+          };
+        });
+
+        return {
+          ...rack,
+          id: rack.rackId || rack.id,
+          slots: slotsArray
+        };
+      });
+
+      setRacks(formattedRacks);
+      setErrorMsg('');
+    } catch (err) {
+      if (err.name === 'CanceledError' || err.code === 'ERR_CANCELED' || err.message === 'canceled') {
+        return;
+      }
+      console.error('Failed to fetch racks:', err);
+      setErrorMsg('ไม่สามารถโหลดข้อมูลคลังสินค้าจากเซิร์ฟเวอร์ได้');
+    } finally {
+      if (isInitial) setLoading(false);
+    }
   };
 
-  const [racks, setRacks] = useState([
-    {
-      id: 'A1',
-      name: 'ZONE A-1',
-      slots: createSlots([
-        { id: 'A1-S1', item: 'RGB Headset', qty: 20 },
-        { id: 'A1-S2', item: 'Gaming Mouse', qty: 5 },  // น้อยกว่า 10 -> แดง (Critical)
-        { id: 'A1-S3', item: 'Mechanical Keyboard', qty: 30 },
-        { id: 'A1-S4', item: 'Mouse Pad XL', qty: 50 },
-        { id: 'A1-S5', item: 'Gaming Chair', qty: 4 },   // น้อยกว่า 10 -> แดง (Critical)
-        { id: 'A1-S6', item: 'USB Microphone', qty: 12 },
-        { id: 'A1-S7', item: 'Desk Lamp RGB', qty: 25 },
-        { id: 'A1-S8', item: 'UltraWide Monitor', qty: 8 }, // น้อยกว่า 10 -> แดง (Critical)
-        { id: 'A1-S9', item: 'Stream Deck', qty: 10 }
-      ])
-    },
-    {
-      id: 'A2',
-      name: 'ZONE A-2',
-      slots: createSlots([
-        { id: 'A2-S1', item: 'Graphics Card RTX', qty: 4 }, // น้อยกว่า 10 -> แดง (Critical)
-        { id: 'A2-S2', item: 'Processor i7', qty: 14 },
-        { id: 'A2-S3', item: 'Motherboard Z790', qty: 9 }, // น้อยกว่า 10 -> แดง (Critical)
-        { id: 'A2-S4', item: 'CPU Air Cooler', qty: 18 },
-        { id: 'A2-S5', item: 'DDR5 RAM 32GB', qty: 22 },
-        { id: 'A2-S6', item: 'NVMe SSD 2TB', qty: 35 },
-        { id: 'A2-S7', item: 'Thermal Paste', qty: 60 },
-        { id: 'A2-S8', item: 'Case Fan 3-Pack', qty: 28 },
-        { id: 'A2-S9', item: 'PCIe Riser Cable', qty: 15 }
-      ])
-    },
-    {
-      id: 'B1',
-      name: 'ZONE B-1',
-      slots: createSlots([
-        { id: 'B1-S1', item: 'Power Supply 850W', qty: 3 }, // น้อยกว่า 10 -> แดง (Critical)
-        { id: 'B1-S2', item: 'Liquid Cooler 360mm', qty: 11 },
-        { id: 'B1-S3', item: 'PC Case ATX', qty: 7 },        // น้อยกว่า 10 -> แดง (Critical)
-        { id: 'B1-S4', item: 'Wi-Fi 6E PCIe Card', qty: 19 },
-        { id: 'B1-S5', item: 'Bluetooth Adapter', qty: 24 },
-        { id: 'B1-S6', item: 'SATA SSD 1TB', qty: 30 },
-        { id: 'B1-S7', item: 'External HDD 4TB', qty: 13 },
-        { id: 'B1-S8', item: 'UPS Battery Backup', qty: 5 }, // น้อยกว่า 10 -> แดง (Critical)
-        { id: 'B1-S9', item: 'HDMI 2.1 Cable', qty: 45 }
-      ])
-    },
-    {
-      id: 'B2',
-      name: 'ZONE B-2',
-      slots: createSlots([
-        { id: 'B2-S1', item: 'CPU Cooler AIO', qty: 10 },
-        { id: 'B2-S2', item: 'RAM 16GB Kit', qty: 25 },
-        { id: 'B2-S3', item: 'Graphics Card RTX 4060', qty: 6 }, // น้อยกว่า 10 -> แดง (Critical)
-        { id: 'B2-S4', item: 'Sound Card PCIe', qty: 8 },    // น้อยกว่า 10 -> แดง (Critical)
-        { id: 'B2-S5', item: 'Capture Card 4K', qty: 4 },     // น้อยกว่า 10 -> แดง (Critical)
-        { id: 'B2-S6', item: 'Antistatic Wrist Strap', qty: 50 },
-        { id: 'B2-S7', item: 'Toolkit Precision', qty: 20 },
-        { id: 'B2-S8', item: 'Cable Extension Kit', qty: 33 },
-        { id: 'B2-S9', item: 'Graphics Card Holder', qty: 16 }
-      ])
-    }
-  ]);
-
+  // 2. ฟังก์ชันเมื่อคลิกเลือก Slot
   const handleSlotClick = (slotData, index, rackId) => {
     const targetRack = racks.find(r => r.id === rackId);
+    if (!targetRack) return;
+
+    const slotNum = slotData.slotNumber || (index + 1);
+
     setSelectedRack({
       id: rackId,
-      displayTitle: `${targetRack.name} - Slot ${index + 1}`,
+      displayTitle: `${targetRack.name || rackId} - Slot ${slotNum}`,
       currentSlot: slotData,
       item: slotData.item,
       qty: slotData.qty
@@ -198,10 +229,27 @@ export default function WarehouseDashboard({ currentUser, onLogout }) {
     setViewMode('focus');
   };
 
+  // 3. Auto Refresh ดึงข้อมูลอัตโนมัติ (รันครั้งเดียวตอน Mount ไม่รีเซ็ตตัววนลูปตอนเปลี่ยนมุมมอง)
+  useEffect(() => {
+    fetchRacksFromAPI(true);
+
+    const interval = setInterval(() => {
+      // ดึงข้อมูลเบื้องหลังเฉพาะตอนอยู่หน้า Overview เพื่อไม่ให้ระบบ 3D ค้าง
+      if (viewModeRef.current === 'overview') {
+        fetchRacksFromAPI(false);
+      }
+    }, 6000); // ตั้งเวลาทุก 6 วินาที
+
+    return () => clearInterval(interval);
+  }, []);
+
   const handleManagerSearch = () => {
     if (!managerSearch) return;
     for (const rack of racks) {
-      const foundSlot = rack.slots.find(s => s.item.toLowerCase().includes(managerSearch.toLowerCase()));
+      const foundSlot = rack.slots.find(s =>
+        (s.item && s.item.toLowerCase().includes(managerSearch.toLowerCase())) ||
+        (s.itemName && s.itemName.toLowerCase().includes(managerSearch.toLowerCase()))
+      );
       if (foundSlot) {
         const index = rack.slots.indexOf(foundSlot);
         handleSlotClick(foundSlot, index, rack.id);
@@ -210,12 +258,22 @@ export default function WarehouseDashboard({ currentUser, onLogout }) {
     }
   };
 
+  if (loading) {
+    return (
+      <div className="p-6 bg-slate-900 min-h-screen flex items-center justify-center text-white">
+        <div className="text-center space-y-3">
+          <RefreshCcw className="w-8 h-8 animate-spin mx-auto text-blue-500" />
+          <p className="text-sm font-semibold tracking-wider">กำลังเชื่อมต่อฐานข้อมูลคลังสินค้า...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 bg-slate-900 min-h-screen font-sans flex gap-6">
       {/* ================= 1. LEFT SIDEBAR ================= */}
       <div className="w-[320px] lg:w-[380px] h-[calc(100vh-3rem)] sticky top-6 bg-[#0b0f19] text-white flex flex-col justify-between p-8 shrink-0 overflow-hidden rounded-3xl border border-slate-800 shadow-xl">
 
-        {/* Background Image / Overlay */}
         <div className="absolute inset-0 z-0 opacity-40 mix-blend-luminosity pointer-events-none">
           <img
             src="https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?q=80&w=1000&auto=format&fit=crop"
@@ -225,7 +283,6 @@ export default function WarehouseDashboard({ currentUser, onLogout }) {
           <div className="absolute inset-0 bg-gradient-to-t from-[#0b0f19] via-[#0b0f19]/60 to-transparent" />
         </div>
 
-        {/* Sidebar Content (Top Logo) */}
         <div className="relative z-10">
           <h1 className="text-5xl font-black tracking-widest text-white leading-none">
             KPA
@@ -235,13 +292,12 @@ export default function WarehouseDashboard({ currentUser, onLogout }) {
           </p>
         </div>
 
-        {/* Sidebar Content (Bottom User Profile) */}
         <div className="relative z-10">
           <div className="bg-[#1a233a]/80 backdrop-blur-md border border-slate-700/60 rounded-full px-5 py-2.5 flex items-center justify-between shadow-lg">
             <div className="flex items-center gap-2">
               <ChevronUp className="w-4 h-4 text-slate-400" />
               <span className="text-sm font-semibold text-slate-200">
-                {currentUser?.username || 'Vendor001'}
+                {currentUser?.username || 'Admin'}
               </span>
             </div>
             {onLogout && (
@@ -256,9 +312,9 @@ export default function WarehouseDashboard({ currentUser, onLogout }) {
         </div>
 
       </div>
-      
-      <div className="flex-1 mx-auto bg-slate-100 rounded-3xl border-4 border-slate-700 shadow-2xl overflow-hidden p-6">
-        
+
+      <div className="flex-1 mx-auto bg-slate-100 rounded-3xl border-4 border-slate-700 shadow-2xl overflow-hidden p-6 flex flex-col">
+
         {/* Top Header Bar ของระบบ */}
         <div className="bg-slate-900 text-white px-6 py-4 rounded-2xl mb-6 flex justify-between items-center shadow-md border border-slate-800">
           <div className="flex items-center gap-3">
@@ -267,28 +323,42 @@ export default function WarehouseDashboard({ currentUser, onLogout }) {
             </div>
             <div>
               <h1 className="text-lg font-black tracking-wider uppercase">Warehouse Automation System</h1>
-              <p className="text-xs text-slate-400">ADMIN CONTROL PANEL: 3D MONITORING & INVENTORY</p>
+              <p className="text-xs text-slate-400">ADMIN CONTROL PANEL: 3D MONITORING & REAL-TIME DB</p>
             </div>
           </div>
-          <div className="bg-slate-800 px-4 py-2 rounded-xl border border-slate-700 text-xs font-bold text-blue-400">
-            ROLE: System Administrator
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => fetchRacksFromAPI(true)}
+              className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-3.5 py-2 rounded-xl text-xs font-bold border border-slate-700 flex items-center gap-1.5 transition cursor-pointer"
+              title="รีเฟรชข้อมูล"
+            >
+              <RefreshCcw size={14} /> Refresh
+            </button>
+            <div className="bg-slate-800 px-4 py-2 rounded-xl border border-slate-700 text-xs font-bold text-blue-400">
+              ROLE: System Administrator
+            </div>
           </div>
         </div>
 
+        {errorMsg && (
+          <div className="mb-4 bg-rose-100 border border-rose-400 text-rose-700 px-4 py-3 rounded-xl text-xs font-semibold">
+            ⚠️ {errorMsg}
+          </div>
+        )}
+
         {/* Grid หลัก แบ่งสัดส่วน 3D Canvas และ Sidebar */}
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 flex-1">
+
           {/* ฝั่ง 3D Canvas */}
           <div className="lg:col-span-3 h-[600px] bg-slate-950 rounded-3xl shadow-2xl overflow-hidden relative border-4 border-slate-800">
-            
-            {/* Header ใน Canvas & ปุ่มย้อนกลับ */}
+
             <div className="absolute top-6 left-6 z-10 flex flex-col gap-3">
               <div className="bg-white/95 backdrop-blur p-4 rounded-xl shadow-xl border border-blue-200">
                 <p className="text-blue-900 font-black flex items-center gap-2 uppercase tracking-tighter">
                   <LayoutDashboard size={18} className="text-blue-500" />
-                  {viewMode === 'overview' ? 'Warehouse Overview' : `Focus Mode: ${selectedRack?.id}`}
+                  {viewMode === 'overview' ? 'Warehouse Overview (Live DB)' : `Focus Mode: ${selectedRack?.id}`}
                 </p>
-                <p className="text-[10px] text-slate-500 uppercase tracking-widest mt-1">Status: Monitoring Mode</p>
+                <p className="text-[10px] text-slate-500 uppercase tracking-widest mt-1">Status: Connected to MongoDB Atlas</p>
               </div>
 
               {viewMode === 'focus' && (
@@ -314,7 +384,7 @@ export default function WarehouseDashboard({ currentUser, onLogout }) {
               <input
                 type="text"
                 placeholder="พิมพ์ชื่อสินค้า..."
-                className="p-2.5 rounded-xl bg-white border-2 border-blue-500 shadow-lg outline-none w-64 text-sm"
+                className="p-2.5 rounded-xl bg-white border-2 border-blue-500 shadow-lg outline-none w-64 text-sm text-slate-800"
                 value={managerSearch}
                 onChange={(e) => setManagerSearch(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleManagerSearch()}
@@ -337,53 +407,33 @@ export default function WarehouseDashboard({ currentUser, onLogout }) {
 
               <SceneManager viewMode={viewMode} />
 
-              {/* ZONE A-1 */}
-              {(viewMode === 'overview' || selectedRack?.id === 'A1') && (
-                <Rack
-                  position={viewMode === 'focus' ? [0, 0, 0] : [-3.0, 0, 2.0]}
-                  name="ZONE A-1"
-                  slots={racks.find(r => r.id === 'A1')?.slots || []}
-                  onSlotClick={(slotData, index) => handleSlotClick(slotData, index, 'A1')}
-                  selectedSlotId={selectedRack?.id === 'A1' ? selectedSlot?.id : null}
-                  onClick={() => { if (viewMode === 'overview') { setSelectedRack({ id: 'A1' }); setViewMode('focus'); }}}
-                />
-              )}
+              {memoizedRacks.map((rack, index) => {
+                const rackCode = (rack.rackId || rack.id || '').toUpperCase();
 
-              {/* ZONE A-2 */}
-              {(viewMode === 'overview' || selectedRack?.id === 'A2') && (
-                <Rack
-                  position={viewMode === 'focus' ? [0, 0, 0] : [-3.0, 0, -2.0]}
-                  name="ZONE A-2"
-                  slots={racks.find(r => r.id === 'A2')?.slots || []}
-                  onSlotClick={(slotData, index) => handleSlotClick(slotData, index, 'A2')}
-                  selectedSlotId={selectedRack?.id === 'A2' ? selectedSlot?.id : null}
-                  onClick={() => { if (viewMode === 'overview') { setSelectedRack({ id: 'A2' }); setViewMode('focus'); }}}
-                />
-              )}
+                let pos = [-3.0, 0, 2.0];
+                if (rackCode.includes('A2') || index === 1) pos = [-3.0, 0, -2.0];
+                if (rackCode.includes('B1') || index === 2) pos = [3.0, 0, 2.0];
+                if (rackCode.includes('B2') || index === 3) pos = [3.0, 0, -2.0];
 
-              {/* ZONE B-1 */}
-              {(viewMode === 'overview' || selectedRack?.id === 'B1') && (
-                <Rack
-                  position={viewMode === 'focus' ? [0, 0, 0] : [3.0, 0, 2.0]}
-                  name="ZONE B-1"
-                  slots={racks.find(r => r.id === 'B1')?.slots || []}
-                  onSlotClick={(slotData, index) => handleSlotClick(slotData, index, 'B1')}
-                  selectedSlotId={selectedRack?.id === 'B1' ? selectedSlot?.id : null}
-                  onClick={() => { if (viewMode === 'overview') { setSelectedRack({ id: 'B1' }); setViewMode('focus'); }}}
-                />
-              )}
+                if (viewMode === 'focus' && selectedRack?.id !== (rack.rackId || rack.id)) return null;
 
-              {/* ZONE B-2 */}
-              {(viewMode === 'overview' || selectedRack?.id === 'B2') && (
-                <Rack
-                  position={viewMode === 'focus' ? [0, 0, 0] : [3.0, 0, -2.0]}
-                  name="ZONE B-2"
-                  slots={racks.find(r => r.id === 'B2')?.slots || []}
-                  onSlotClick={(slotData, index) => handleSlotClick(slotData, index, 'B2')}
-                  selectedSlotId={selectedRack?.id === 'B2' ? selectedSlot?.id : null}
-                  onClick={() => { if (viewMode === 'overview') { setSelectedRack({ id: 'B2' }); setViewMode('focus'); }}}
-                />
-              )}
+                return (
+                  <Rack
+                    key={rack._id || rack.rackId || index}
+                    position={viewMode === 'focus' ? [0, 0, 0] : pos}
+                    name={rack.name || `ZONE ${rackCode}`}
+                    slots={rack.slots || []}
+                    onSlotClick={(slotData, slotIdx) => handleSlotClick(slotData, slotIdx, rack.rackId || rack.id)}
+                    selectedSlotId={selectedRack?.id === (rack.rackId || rack.id) ? selectedSlot?.id : null}
+                    onClick={() => {
+                      if (viewMode === 'overview') {
+                        setSelectedRack({ id: rack.rackId || rack.id });
+                        setViewMode('focus');
+                      }
+                    }}
+                  />
+                );
+              })}
 
               <OrbitControls
                 makeDefault
@@ -398,7 +448,7 @@ export default function WarehouseDashboard({ currentUser, onLogout }) {
           <div className="bg-white p-6 rounded-3xl shadow-xl border-2 border-slate-200 flex flex-col justify-between">
             <div>
               <h3 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-2 border-b border-slate-100 pb-3">
-                <Package size={20} className="text-blue-500" /> RACK INFO
+                <Package size={20} className="text-blue-500" /> RACK INFO (LIVE)
               </h3>
 
               {selectedRack && selectedRack.currentSlot ? (
@@ -408,7 +458,7 @@ export default function WarehouseDashboard({ currentUser, onLogout }) {
                       {selectedRack.displayTitle}
                     </p>
                     <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">
-                      Location detail
+                      MongoDB Atlas Synced
                     </p>
                   </div>
 
@@ -428,9 +478,8 @@ export default function WarehouseDashboard({ currentUser, onLogout }) {
                         </p>
                       </div>
                       <div className="text-right">
-                        <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase ${
-                          selectedRack.currentSlot.status === 'Critical' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'
-                        }`}>
+                        <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase ${selectedRack.currentSlot.status === 'Critical' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'
+                          }`}>
                           {selectedRack.currentSlot.status}
                         </span>
                       </div>
@@ -443,7 +492,7 @@ export default function WarehouseDashboard({ currentUser, onLogout }) {
                     <Package size={32} />
                   </div>
                   <p className="font-bold text-slate-500">โปรดเลือก Slot</p>
-                  <p className="text-xs mt-1">คลิกที่กล่องในชั้นวางเพื่อดูรายละเอียด</p>
+                  <p className="text-xs mt-1">คลิกที่กล่องในชั้นวางเพื่อดูรายละเอียดสินค้าจริงจากฐานข้อมูล</p>
                 </div>
               )}
             </div>
