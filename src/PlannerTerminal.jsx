@@ -56,7 +56,7 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
     const fetchReceipts = async () => {
       try {
         setLoadingReceipts(true);
-        const res = await fetch('http://localhost:5000/api/receipts');
+        const res = await fetch('https://mainwms-backend.onrender.com/api/receipts');
         if (res.ok) {
           const data = await res.json();
           // กรองเอาเฉพาะใบเสร็จที่ Reception กด Approve / Confirmed แล้วเท่านั้น
@@ -77,7 +77,7 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
     const fetchRacks = async () => {
       try {
         setLoadingRacks(true);
-        const res = await fetch('http://localhost:5000/api/racks');
+        const res = await fetch('https://mainwms-backend.onrender.com/api/racks');
         if (res.ok) {
           const data = await res.json();
           // แปลงโครงสร้างข้อมูลจาก DB ให้แมตช์กับรูปแบบ rackStorage state
@@ -226,7 +226,7 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
 
     // อัปเดตข้อมูล Rack ลง MongoDB ผ่าน API
     try {
-      await fetch(`http://localhost:5000/api/racks/${rackId}`, {
+      await fetch(`https://mainwms-backend.onrender.com/api/racks/${rackId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ slots: currentSlots })
@@ -244,7 +244,7 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
       // เช็กดูใน Console (F12) ว่ามี targetLocation โผล่มาในก้อนนี้ไหม
       console.log("Payload ที่กำลังจะส่งไปอัปเดตใบเสร็จ:", updatedItemsForReceipt);
 
-      await fetch(`http://localhost:5000/api/receipts/${selectedReceipt._id}`, {
+      await fetch(`https://mainwms-backend.onrender.com/api/receipts/${selectedReceipt._id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ items: updatedItemsForReceipt })
@@ -340,7 +340,7 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
 
   const handleApproveAll = async () => { // <--- เติม async ตรงนี้
     try {
-      const res = await fetch(`http://localhost:5000/api/receipts/${selectedReceipt._id}/status`, {
+      const res = await fetch(`https://mainwms-backend.onrender.com/api/receipts/${selectedReceipt._id}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'Ready to Pick' })
@@ -351,7 +351,7 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
         setViewMode('list');
         setSelectedReceipt(null);
         // รีเฟรชรายการใบเสร็จ
-        const updatedRes = await fetch('http://localhost:5000/api/receipts');
+        const updatedRes = await fetch('https://mainwms-backend.onrender.com/api/receipts');
         if (updatedRes.ok) {
           const data = await updatedRes.json();
           setPlannerReceipts(data.filter(rec => rec.status === 'Confirmed'));

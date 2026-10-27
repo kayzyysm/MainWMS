@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const API = axios.create({
-  baseURL: 'http://localhost:5000/api', // ต้องเป็น http:// (ไม่มี s)
+  baseURL: 'https://mainwms-backend.onrender.com/api', // ต้องเป็น http:// (ไม่มี s)
 });
 
 export const login = (credentials) => API.post('/auth/login', credentials);

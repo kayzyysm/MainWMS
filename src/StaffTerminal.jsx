@@ -13,7 +13,7 @@ export default function StaffTerminal({ currentUser, onLogout }) {
   const fetchReceipts = async () => {
     try {
       setLoading(true);
-      const res = await fetch('http://localhost:5000/api/receipts');
+      const res = await fetch('https://mainwms-backend.onrender.com/api/receipts');
       if (res.ok) {
         const data = await res.json();
         // กรองเฉพาะสถานะ Ready to Pick (หรือ Stored / Confirmed ตามที่เซ็ตไว้)
@@ -73,7 +73,7 @@ export default function StaffTerminal({ currentUser, onLogout }) {
           const slotName = slotMatch ? slotMatch[1] : 'Slot 1';
 
           // 2. ดึงข้อมูล Rack ปัจจุบันจาก Backend มาก่อนเพื่อเอาค่า slots เดิม
-          const rackRes = await fetch(`http://localhost:5000/api/racks/${rackId}`);
+          const rackRes = await fetch(`https://mainwms-backend.onrender.com/api/racks/${rackId}`);
           if (rackRes.ok) {
             const rackData = await rackRes.json();
             const currentSlots = rackData.slots || {};
@@ -98,7 +98,7 @@ export default function StaffTerminal({ currentUser, onLogout }) {
             currentSlots[slotName] = { items: currentItems };
 
             // 4. บันทึกข้อมูลตู้ Rack ที่อัปเดตแล้วกลับเข้า MongoDB ผ่าน API PUT
-            await fetch(`http://localhost:5000/api/racks/${rackId}`, {
+            await fetch(`https://mainwms-backend.onrender.com/api/racks/${rackId}`, {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ slots: currentSlots })
@@ -115,7 +115,7 @@ export default function StaffTerminal({ currentUser, onLogout }) {
         if (updatedItems.length === 0) {
           // ถ้าจัดเก็บครบทุกชิ้นแล้ว ให้ยิง API อัปเดตสถานะใบเสร็จเป็น 'Completed' ลง MongoDB
           try {
-            await fetch(`http://localhost:5000/api/receipts/${selectedReceipt.id}/status`, {
+            await fetch(`https://mainwms-backend.onrender.com/api/receipts/${selectedReceipt.id}/status`, {
               method: 'PATCH',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ status: 'Completed' })

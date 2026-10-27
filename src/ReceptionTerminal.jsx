@@ -17,7 +17,7 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
   const fetchReceipts = async () => {
     try {
       setLoading(true);
-      const res = await fetch('http://localhost:5000/api/receipts');
+      const res = await fetch('https://mainwms-backend.onrender.com/api/receipts');
       if (res.ok) {
         const data = await res.json();
         // แสดงเฉพาะใบเสร็จที่ยังรอการตรวจสอบรับเข้า (Pending) หรือทั้งหมดตามต้องการ
@@ -89,7 +89,7 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
 
     try {
       const dbId = selectedReceipt._id;
-      const res = await fetch(`http://localhost:5000/api/receipts/${dbId}/status`, {
+      const res = await fetch(`https://mainwms-backend.onrender.com/api/receipts/${dbId}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'Confirmed' })

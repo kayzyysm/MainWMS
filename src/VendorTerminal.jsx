@@ -23,7 +23,7 @@ export default function VendorTerminal({ currentUser, onBack, onLogout }) {
     const fetchProducts = async () => {
       try {
         setLoadingProducts(true);
-        const res = await fetch('http://localhost:5000/api/products');
+        const res = await fetch('https://mainwms-backend.onrender.com/api/products');
         if (res.ok) {
           const data = await res.json();
           setProductOptions(data);
@@ -41,7 +41,7 @@ export default function VendorTerminal({ currentUser, onBack, onLogout }) {
   useEffect(() => {
     const fetchReceipts = async () => {
       try {
-        const res = await fetch('http://localhost:5000/api/receipts');
+        const res = await fetch('https://mainwms-backend.onrender.com/api/receipts');
         if (res.ok) {
           const data = await res.json();
           setReceipts(data);
@@ -103,7 +103,7 @@ export default function VendorTerminal({ currentUser, onBack, onLogout }) {
     };
 
     try {
-      const res = await fetch('http://localhost:5000/api/receipts', {
+      const res = await fetch('https://mainwms-backend.onrender.com/api/receipts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newReceiptData)
@@ -271,7 +271,7 @@ export default function VendorTerminal({ currentUser, onBack, onLogout }) {
                     // ฟังก์ชันดึงข้อมูลด่วนเมื่อกดปุ่มรีเฟรช
                     const refreshNow = async () => {
                       try {
-                        const res = await fetch('http://localhost:5000/api/receipts');
+                        const res = await fetch('https://mainwms-backend.onrender.com/api/receipts');
                         if (res.ok) {
                           const data = await res.json();
                           setReceipts(data);
