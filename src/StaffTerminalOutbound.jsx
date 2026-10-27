@@ -84,7 +84,7 @@ export default function StaffTerminalOutbound({ currentUser, onLogout }) {
 
         <div className="relative z-10">
           <h1 className="text-5xl font-black tracking-widest text-white leading-none">KPA</h1>
-          <p className="text-3xl font-bold tracking-[0.35em] text-slate-200 mt-2">W . M S</p>
+          <p className="text-3xl font-bold tracking-[0.35em] text-slate-200 mt-2">W M S</p>
           <div className="mt-8 relative inline-block">
             <div className="w-12 h-12 rounded-full border-2 border-dashed border-amber-400 flex items-center justify-center animate-spin-slow">
               <div className="w-3 h-3 bg-amber-500 rounded-full"></div>

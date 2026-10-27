@@ -224,7 +224,7 @@ export default function VendorTerminal({ currentUser, onBack, onLogout }) {
 
         <div className="relative z-10">
           <h1 className="text-5xl font-black tracking-widest text-white leading-none">KPA</h1>
-          <p className="text-3xl font-bold tracking-[0.35em] text-slate-200 mt-2">W.M.S</p>
+          <p className="text-3xl font-bold tracking-[0.35em] text-slate-200 mt-2">W M S</p>
         </div>
 
         <div className="relative z-10">
