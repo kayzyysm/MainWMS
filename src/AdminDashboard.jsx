@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, Box, Text } from '@react-three/drei';
 import gsap from 'gsap';
-import { LayoutDashboard, RotateCcw, Package, Layers, ChevronUp, RefreshCcw } from 'lucide-react';
+import { LayoutDashboard, RotateCcw, Package, Layers, ChevronUp, RefreshCcw, Search } from 'lucide-react';
 import { getRacks } from './services/api'; // ปรับ path ตามโครงสร้างโปรเจกต์ของคุณ
 
 // 1. คอมโพเนนต์กล่องสินค้าพร้อมเอฟเฟกต์กระพริบ
@@ -108,21 +108,21 @@ function SceneManager({ viewMode }) {
   return null;
 }
 
-// 4. Main Admin Warehouse Dashboard Component (เชื่อมต่อ MongoDB จริง)
+// 4. Main Admin Warehouse Dashboard Component
 export default function WarehouseDashboard({ currentUser, onLogout }) {
   const [viewMode, setViewMode] = useState('overview');
   const [selectedRack, setSelectedRack] = useState(null);
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [managerSearch, setManagerSearch] = useState('');
+  const [searchSuggestions, setSearchSuggestions] = useState([]); // State สำหรับ Dropdown
 
   const [racks, setRacks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
 
   const abortControllerRef = useRef(null);
-  const viewModeRef = useRef(viewMode); // ใช้เก็บค่า viewMode ปัจจุบันป้องกันปัญหา Closure ใน setInterval
+  const viewModeRef = useRef(viewMode);
 
-  // อัปเดตค่า ref ทุกครั้งที่ viewMode เปลี่ยน
   useEffect(() => {
     viewModeRef.current = viewMode;
   }, [viewMode]);
@@ -211,7 +211,7 @@ export default function WarehouseDashboard({ currentUser, onLogout }) {
     }
   };
 
-  // 2. ฟังก์ชันเมื่อคลิกเลือก Slot
+  // 2. ฟังก์ชันเมื่อคลิกเลือก Slot เพื่อโฟกัสโมเดล 3D
   const handleSlotClick = (slotData, index, rackId) => {
     const targetRack = racks.find(r => r.id === rackId);
     if (!targetRack) return;
@@ -220,7 +220,7 @@ export default function WarehouseDashboard({ currentUser, onLogout }) {
 
     setSelectedRack({
       id: rackId,
-      displayTitle: `${targetRack.name || rackId} - Slot ${slotNum}`,
+      displayTitle: `${targetRack.name || rackId} Slot ${slotNum}`,
       currentSlot: slotData,
       item: slotData.item,
       qty: slotData.qty
@@ -229,33 +229,69 @@ export default function WarehouseDashboard({ currentUser, onLogout }) {
     setViewMode('focus');
   };
 
-  // 3. Auto Refresh ดึงข้อมูลอัตโนมัติ (รันครั้งเดียวตอน Mount ไม่รีเซ็ตตัววนลูปตอนเปลี่ยนมุมมอง)
+  // 3. Auto Refresh ดึงข้อมูลอัตโนมัติ
   useEffect(() => {
     fetchRacksFromAPI(true);
 
     const interval = setInterval(() => {
-      // ดึงข้อมูลเบื้องหลังเฉพาะตอนอยู่หน้า Overview เพื่อไม่ให้ระบบ 3D ค้าง
       if (viewModeRef.current === 'overview') {
         fetchRacksFromAPI(false);
       }
-    }, 6000); // ตั้งเวลาทุก 6 วินาที
+    }, 6000);
 
     return () => clearInterval(interval);
   }, []);
 
+  // 4. ฟังก์ชันจัดการเมื่อผู้ใช้นำคำค้นหาไปใช้ (ผ่านปุ่มกด หรือกด Enter)
   const handleManagerSearch = () => {
-    if (!managerSearch) return;
+    if (!managerSearch.trim()) return;
+    
+    let foundMatch = false;
     for (const rack of racks) {
       const foundSlot = rack.slots.find(s =>
         (s.item && s.item.toLowerCase().includes(managerSearch.toLowerCase())) ||
         (s.itemName && s.itemName.toLowerCase().includes(managerSearch.toLowerCase()))
       );
+      
       if (foundSlot) {
         const index = rack.slots.indexOf(foundSlot);
-        handleSlotClick(foundSlot, index, rack.id);
+        handleSlotClick(foundSlot, index, rack.rackId || rack.id);
+        foundMatch = true;
         break;
       }
     }
+    
+    setSearchSuggestions([]);
+    if (!foundMatch) {
+      alert(`ไม่พบสินค้าที่ตรงกับคำว่า "${managerSearch}" ในคลังสินค้า`);
+    }
+  };
+
+  // 5. ฟังก์ชันเมื่อพิมพ์ตัวอักษรเพื่อกรองทำ Dropdown แนะนำ
+  const handleInputChange = (e) => {
+    const keyword = e.target.value;
+    setManagerSearch(keyword);
+
+    if (!keyword.trim()) {
+      setSearchSuggestions([]);
+      return;
+    }
+
+    const matches = [];
+    racks.forEach(rack => {
+      rack.slots.forEach((slot, index) => {
+        if (slot.item && slot.item !== 'พื้นที่ว่าง' && slot.item.toLowerCase().includes(keyword.toLowerCase())) {
+          matches.push({
+            ...slot,
+            slotIndex: index,
+            rackId: rack.rackId || rack.id,
+            rackName: rack.name || rack.rackId || rack.id
+          });
+        }
+      });
+    });
+
+    setSearchSuggestions(matches);
   };
 
   if (loading) {
@@ -288,7 +324,7 @@ export default function WarehouseDashboard({ currentUser, onLogout }) {
             KPA
           </h1>
           <p className="text-3xl font-bold tracking-[0.35em] text-slate-200 mt-2">
-            W.M.S
+            W M S
           </p>
         </div>
 
@@ -379,22 +415,49 @@ export default function WarehouseDashboard({ currentUser, onLogout }) {
               </div>
             )}
 
-            {/* Search Box */}
-            <div className="absolute top-6 right-6 z-10 flex gap-2">
-              <input
-                type="text"
-                placeholder="พิมพ์ชื่อสินค้า..."
-                className="p-2.5 rounded-xl bg-white border-2 border-blue-500 shadow-lg outline-none w-64 text-sm text-slate-800"
-                value={managerSearch}
-                onChange={(e) => setManagerSearch(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleManagerSearch()}
-              />
-              <button
-                onClick={handleManagerSearch}
-                className="bg-blue-600 text-white px-4 py-2 rounded-xl font-bold shadow-lg hover:bg-blue-700 transition flex items-center gap-2 cursor-pointer"
-              >
-                <Package size={18} /> SEARCH
-              </button>
+            {/* Search Box พร้อม Dropdown แนะนำรายการ */}
+            <div className="absolute top-6 right-6 z-20">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="พิมพ์ชื่อสินค้า..."
+                  className="p-2.5 rounded-xl bg-white border-2 border-blue-500 shadow-lg outline-none w-64 text-sm text-slate-800 font-medium focus:ring-2 focus:ring-blue-400"
+                  value={managerSearch}
+                  onChange={handleInputChange}
+                  onKeyDown={(e) => e.key === 'Enter' && handleManagerSearch()}
+                />
+                <button
+                  onClick={handleManagerSearch}
+                  className="bg-blue-600 text-white px-4 py-2 rounded-xl font-bold shadow-lg hover:bg-blue-700 transition flex items-center gap-2 cursor-pointer shrink-0"
+                >
+                  <Package size={18} /> SEARCH
+                </button>
+              </div>
+
+              {/* Dropdown รายชื่อสินค้าแนะนำ */}
+              {searchSuggestions.length > 0 && (
+                <div className="absolute top-12 left-0 w-64 bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl border border-slate-200 mt-2 max-h-60 overflow-y-auto z-30 divide-y divide-slate-100">
+                  {searchSuggestions.map((item, idx) => (
+                    <div
+                      key={idx}
+                      onClick={() => {
+                        setManagerSearch(item.item);
+                        setSearchSuggestions([]);
+                        handleSlotClick(item, item.slotIndex, item.rackId);
+                      }}
+                      className="p-3 hover:bg-blue-50/80 cursor-pointer transition text-xs flex flex-col gap-0.5 group"
+                    >
+                      <p className="font-bold text-slate-800 group-hover:text-blue-600">{item.item}</p>
+                      <div className="flex justify-between items-center text-[10px] text-slate-500">
+                        <span className="font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">
+                          {item.rackName} (Slot {item.slotNumber})
+                        </span>
+                        <span className="font-bold text-slate-600">{item.qty} ชิ้น</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* R3F Canvas */}
@@ -492,7 +555,7 @@ export default function WarehouseDashboard({ currentUser, onLogout }) {
                     <Package size={32} />
                   </div>
                   <p className="font-bold text-slate-500">โปรดเลือก Slot</p>
-                  <p className="text-xs mt-1">คลิกที่กล่องในชั้นวางเพื่อดูรายละเอียดสินค้าจริงจากฐานข้อมูล</p>
+                  <p className="text-xs mt-1">คลิกที่กล่องในชั้นวางหรือใช้ช่องค้นหาด้านบน เพื่อดูรายละเอียดสินค้าจริงจากฐานข้อมูล</p>
                 </div>
               )}
             </div>

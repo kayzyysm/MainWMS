@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronUp, Bell, ArrowLeft, Box, CheckCircle2, Layers, History, Clock, MapPin, Sparkles, Wrench, Building2 } from 'lucide-react';
+import { ChevronUp, Bell, ArrowLeft, Box, CheckCircle2, Layers, History, Clock, MapPin, Sparkles, Wrench, Building2, Search, Scan } from 'lucide-react';
 
 export default function PlannerTerminal({ currentUser, onLogout }) {
   const [viewMode, setViewMode] = useState('list');
   const [selectedReceipt, setSelectedReceipt] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   // State เก็บรายการใบเสร็จจาก MongoDB (ที่ผ่าน Reception แล้ว)
   const [plannerReceipts, setPlannerReceipts] = useState([]);
