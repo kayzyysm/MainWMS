@@ -25,7 +25,7 @@ export default function WarehouseLandingPage({ currentUser, setCurrentUser, onLo
       <nav className="sticky top-0 z-50 bg-[#fafafa]/90 backdrop-blur-md px-8 py-5 flex justify-between items-center border-b border-gray-100">
         <div className="flex-1 flex justify-start">
           <a href="#hero" onClick={(e) => scrollToSection(e, 'hero')} className="text-2xl font-bold tracking-tighter">
-            KPA
+            KPA <span className="text-2xl font-bold tracking-tighter">WMS</span>
           </a>
         </div>
 
@@ -162,8 +162,6 @@ export default function WarehouseLandingPage({ currentUser, setCurrentUser, onLo
                     );
                   }
 
-                  
-
                   return (
                     <button
                       onClick={() => onNavigate('outbound')}
@@ -181,7 +179,7 @@ export default function WarehouseLandingPage({ currentUser, setCurrentUser, onLo
                   <div className="flex items-center justify-between border-b border-slate-700/60 pb-3 mb-4">
                     <span className="text-[11px] font-mono text-purple-400 font-semibold tracking-wider uppercase">User Profile & Role</span>
                     <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-bold border border-emerald-500/30 uppercase">
-                      ● Active
+                      ● Active Session
                     </span>
                   </div>
 
@@ -194,23 +192,23 @@ export default function WarehouseLandingPage({ currentUser, setCurrentUser, onLo
 
                   <div className="space-y-2.5 text-xs">
                     <div className="bg-slate-800/50 p-2.5 rounded-xl border border-slate-700/40 flex justify-between items-center">
-                      <span className="text-slate-400">Assigned Gate:</span>
-                      <span className="font-semibold text-purple-200">Dock A-04</span>
+                      <span className="text-slate-400">Assigned Zone:</span>
+                      <span className="font-semibold text-purple-200">Zone A & B (Live)</span>
                     </div>
                     <div className="bg-slate-800/50 p-2.5 rounded-xl border border-slate-700/40 flex justify-between items-center">
-                      <span className="text-slate-400">Scheduled Time:</span>
-                      <span className="font-semibold text-emerald-300">14:30 PM</span>
+                      <span className="text-slate-400">Database Sync:</span>
+                      <span className="font-semibold text-emerald-300">MongoDB Atlas</span>
                     </div>
                     <div className="bg-slate-800/50 p-2.5 rounded-xl border border-slate-700/40 flex justify-between items-center">
                       <span className="text-slate-400">System Status:</span>
-                      <span className="font-semibold text-amber-300">Ready</span>
+                      <span className="font-semibold text-amber-300">Operational</span>
                     </div>
                   </div>
                 </div>
 
                 <div className="pt-4 border-t border-slate-700/40 mt-4 text-[10px] text-slate-500 flex justify-between font-mono">
-                  <span>SYSTEM_ID: #WAS-8821</span>
-                  <span>VER 2.4</span>
+                  <span>SYSTEM_ID: #KPA-WMS</span>
+                  <span>VER 3.0 Live</span>
                 </div>
               </div>
 
@@ -227,54 +225,54 @@ export default function WarehouseLandingPage({ currentUser, setCurrentUser, onLo
             </div>
             <div className="w-full h-[300px] md:h-[300px] bg-[#1e293b] rounded-[2rem] shadow-xl pt-30 md:pt-39 flex items-center justify-center text-white">
               <p className="text-sm font-medium text-slate-300">
-                Please <button onClick={() => setIsLoginOpen(true)} className="underline text-purple-300 font-bold hover:text-white">Sign In</button> to access the automation dashboard.
+                Please <button onClick={() => setIsLoginOpen(true)} className="underline text-purple-300 font-bold hover:text-white cursor-pointer">Sign In</button> to access the 3D warehouse management terminal.
               </p>
             </div>
           </div>
         )}
 
-        <div className="mt-20 pt-8 flex flex-wrap justify-between items-center opacity-40 grayscale gap-6">
-          <span className="text-xl font-bold italic">Logoipsum</span>
-          <span className="text-xl font-bold">Logoipsum</span>
-          <span className="text-xl font-serif">LOGOIPSUM</span>
-          <span className="text-xl font-mono">logoipsum</span>
-          <span className="text-xl font-sans font-black">LOGOIPSUM</span>
+        <div className="mt-20 pt-8 flex flex-wrap justify-center items-center opacity-50 grayscale gap-12 text-xs font-mono tracking-widest uppercase">
+          <span>MongoDB Atlas</span>
+          <span>React Three Fiber</span>
+          <span>Node.js / Express</span>
+          <span>Tailwind CSS</span>
+          <span>Render Cloud</span>
         </div>
       </section>
 
       {/* ================= 3. BENEFITS SECTION ================= */}
       <section id="benefits" className="py-24 max-w-6xl mx-auto px-6 border-t border-gray-200/60 scroll-mt-20">
         <p className="text-xs font-mono font-semibold text-gray-500 mb-4 tracking-wider uppercase">Benefits</p>
-        <h2 className="text-5xl font-serif mb-4">We've cracked the code.</h2>
-        <p className="text-gray-500 mb-16 text-sm">Area provides real insights, without the data overload.</p>
+        <h2 className="text-5xl font-serif mb-4">Next-generation inventory control.</h2>
+        <p className="text-gray-500 mb-16 text-sm">Empowering warehouse operations with real-time 3D visualization and automated workflows.</p>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-16">
           <div>
-            <div className="mb-3 text-lg">🔗</div>
-            <h3 className="font-semibold text-sm mb-2">Amplify Insights</h3>
+            <div className="mb-3 text-lg">📦</div>
+            <h3 className="font-semibold text-sm mb-2">Real-Time Inventory</h3>
             <p className="text-xs text-gray-500 leading-relaxed">
-              Unlock data-driven decisions with comprehensive analytics, revealing key opportunities for strategic regional growth.
+              Sync stock movements across inbound, putaway, and outbound operations instantly with MongoDB Atlas.
             </p>
           </div>
           <div>
             <div className="mb-3 text-lg">🌐</div>
-            <h3 className="font-semibold text-sm mb-2">Control Your Global Presence</h3>
+            <h3 className="font-semibold text-sm mb-2">3D Spatial Monitoring</h3>
             <p className="text-xs text-gray-500 leading-relaxed">
-              Manage and track satellite offices, ensuring consistent performance and streamlined operations everywhere.
+              Interact directly with racks, slots, and pallets using immersive WebGL graphics powered by React Three Fiber.
             </p>
           </div>
           <div>
-            <div className="mb-3 text-lg">🗣️</div>
-            <h3 className="font-semibold text-sm mb-2">Remove Language Barriers</h3>
+            <div className="mb-3 text-lg">⚡</div>
+            <h3 className="font-semibold text-sm mb-2">Optimized Putaway</h3>
             <p className="text-xs text-gray-500 leading-relaxed">
-              Adapt to diverse markets with built-in localization for clear communication and enhanced user experience.
+              Smart location recommendations guide planners and staff to the most efficient storage slots.
             </p>
           </div>
           <div>
-            <div className="mb-3 text-lg">📈</div>
-            <h3 className="font-semibold text-sm mb-2">Visualize Growth</h3>
+            <div className="mb-3 text-lg">📊</div>
+            <h3 className="font-semibold text-sm mb-2">Activity Logging</h3>
             <p className="text-xs text-gray-500 leading-relaxed">
-              Generate precise, visually compelling reports that illustrate your growth trajectories across all regions.
+              Maintain complete audit trails of every transaction, ensuring total accountability and error reduction.
             </p>
           </div>
         </div>
@@ -282,8 +280,8 @@ export default function WarehouseLandingPage({ currentUser, setCurrentUser, onLo
         {/* Hero Image */}
         <div className="w-full h-[450px] rounded-[2rem] overflow-hidden shadow-lg">
           <img
-            src="https://images.unsplash.com/photo-1506744038136-46273834b3fb?q=80&w=2000&auto=format&fit=crop"
-            alt="Landscape"
+            src="https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?q=80&w=2000&auto=format&fit=crop"
+            alt="Warehouse Operations"
             className="w-full h-full object-cover"
           />
         </div>
@@ -295,17 +293,17 @@ export default function WarehouseLandingPage({ currentUser, setCurrentUser, onLo
         {/* Part A: See the Big Picture */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-16 items-center mb-32">
           <div>
-            <h2 className="text-5xl font-serif mb-6">See the Big Picture</h2>
+            <h2 className="text-5xl font-serif mb-6">Total Operational Visibility</h2>
             <p className="text-xs text-gray-500 mb-10 leading-relaxed max-w-md">
-              Area turns your data into clear, vibrant visuals that show you exactly what's happening in each region.
+              KPA WMS transforms complex warehouse logistics into intuitive digital workflows, giving your team complete clarity at a glance.
             </p>
 
             <div className="space-y-6 border-t border-gray-100 pt-6">
               {[
-                "Spot Trends in Seconds: No more digging through numbers.",
-                "Get Everyone on the Same Page: Share easy-to-understand reports with your team.",
-                "Make Presentations Pop: Interactive maps and dashboards keep your audience engaged.",
-                "Your Global Snapshot: Get a quick, clear overview of your entire operation."
+                "Streamlined Inbound: Vendors and receptionists easily log receipts and verify stock.",
+                "Precision Planner Terminal: Organize items into specific racks and 9-slot pallet tiers.",
+                "Interactive 3D Dashboard: Admins monitor capacity, slot status, and critical alerts live.",
+                "Efficient Outbound: Fulfill orders rapidly with automated picking and dispatch tracking."
               ].map((text, idx) => (
                 <div key={idx} className="flex items-start gap-4 text-xs font-medium border-b border-gray-100 pb-4">
                   <span className="text-gray-400">0{idx + 1}</span>
@@ -314,69 +312,69 @@ export default function WarehouseLandingPage({ currentUser, setCurrentUser, onLo
               ))}
             </div>
 
-            <button className="mt-8 bg-[#1e293b] text-white px-6 py-3 rounded-full text-xs font-medium hover:bg-black transition-all">
-              Discover More
+            <button onClick={() => setIsLoginOpen(true)} className="mt-8 bg-[#1e293b] text-white px-6 py-3 rounded-full text-xs font-medium hover:bg-black transition-all cursor-pointer">
+              Get Started Now
             </button>
           </div>
 
           <div className="h-[500px] bg-[#eae5d9] rounded-[2rem] overflow-hidden flex items-center justify-center p-8">
             <img
-              src="https://images.unsplash.com/photo-1579783902614-a3fb3927b675?q=80&w=1000&auto=format&fit=crop"
-              alt="Artistic 3D Display"
+              src="https://images.unsplash.com/photo-1553413077-190dd305871c?q=80&w=1000&auto=format&fit=crop"
+              alt="Warehouse Analytics"
               className="w-full h-full object-cover rounded-xl"
             />
           </div>
         </div>
 
-        {/* Part B: Why Choose Area? Comparison Table */}
+        {/* Part B: Why Choose KPA WMS? Comparison Table */}
         <div className="text-center mb-24">
-          <p className="text-xs font-mono text-gray-400 mb-2">Specs</p>
-          <h2 className="text-5xl font-serif mb-4">Why Choose Area?</h2>
+          <p className="text-xs font-mono text-gray-400 mb-2">Architecture</p>
+          <h2 className="text-5xl font-serif mb-4">Why Choose KPA WMS?</h2>
           <p className="text-xs text-gray-500 max-w-lg mx-auto mb-8">
-            You need a solution that keeps up. That's why we developed Area. A developer-friendly approach to streamline your business.
+            Engineered for high performance, modern full-stack reliability, and seamless multi-role collaboration.
           </p>
-          <button className="bg-[#1e293b] text-white px-6 py-3 rounded-full text-xs font-medium hover:bg-black transition-all mb-16">
-            Discover More
+          <button onClick={() => setIsLoginOpen(true)} className="bg-[#1e293b] text-white px-6 py-3 rounded-full text-xs font-medium hover:bg-black transition-all mb-16 cursor-pointer">
+            Explore System Modules
           </button>
 
           {/* Comparison Cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-0 border border-gray-200 rounded-3xl overflow-hidden bg-white text-left text-xs">
-            {/* Column 1: Area */}
+            {/* Column 1: KPA WMS */}
             <div className="p-8 bg-white border-b md:border-b-0 md:border-r border-gray-200">
-              <h3 className="text-xl font-bold mb-8">Area</h3>
+              <h3 className="text-xl font-bold mb-8 text-purple-700">KPA WMS</h3>
               <ul className="space-y-6 text-gray-700">
-                <li className="flex items-center gap-2">✓ Ultra-fast browsing</li>
-                <li className="flex items-center gap-2">✓ Advanced AI insights</li>
-                <li className="flex items-center gap-2">✓ Seamless integration</li>
-                <li className="flex items-center gap-2">✓ Advanced AI insights</li>
-                <li className="flex items-center gap-2">✓ Ultra-fast browsing</li>
-                <li className="flex items-center gap-2">✓ Full UTF-8 support</li>
+                <li className="flex items-center gap-2">✓ Real-time 3D spatial view</li>
+                <li className="flex items-center gap-2">✓ Live MongoDB Atlas sync</li>
+                <li className="flex items-center gap-2">✓ Multi-role terminal access</li>
+                <li className="flex items-center gap-2">✓ Automated slot capacity checks</li>
+                <li className="flex items-center gap-2">✓ Instant search & dropdowns</li>
+                <li className="flex items-center gap-2">✓ Fully responsive web interface</li>
               </ul>
             </div>
 
-            {/* Column 2: WebSurge */}
+            {/* Column 2: Legacy WMS */}
             <div className="p-8 bg-gray-50/50 border-b md:border-b-0 md:border-r border-gray-200">
-              <h3 className="text-xl font-bold text-gray-400 mb-8">WebSurge</h3>
+              <h3 className="text-xl font-bold text-gray-400 mb-8">Legacy WMS</h3>
               <ul className="space-y-6 text-gray-500">
-                <li className="flex items-center gap-2">✓ Fast browsing</li>
-                <li className="flex items-center gap-2">✓ Basic AI recommendations</li>
-                <li className="flex items-center gap-2">✕ Restricts customization</li>
-                <li className="flex items-center gap-2">✕ Basic AI insights</li>
-                <li className="flex items-center gap-2">✓ Fast browsing</li>
-                <li className="flex items-center gap-2">✕ Potential display errors</li>
+                <li className="flex items-center gap-2">✕ Static 2D spreadsheet lists</li>
+                <li className="flex items-center gap-2">✓ Local database dependency</li>
+                <li className="flex items-center gap-2">✕ Rigid user permissions</li>
+                <li className="flex items-center gap-2">✕ Manual capacity auditing</li>
+                <li className="flex items-center gap-2">✕ Slow query response times</li>
+                <li className="flex items-center gap-2">✕ Outdated desktop UI</li>
               </ul>
             </div>
 
-            {/* Column 3: HyperView */}
+            {/* Column 3: Manual Tracking */}
             <div className="p-8 bg-gray-50/50">
-              <h3 className="text-xl font-bold text-gray-400 mb-8">HyperView</h3>
+              <h3 className="text-xl font-bold text-gray-400 mb-8">Manual Tracking</h3>
               <ul className="space-y-6 text-gray-400">
-                <li className="flex items-center gap-2">✕ Moderate speeds</li>
-                <li className="flex items-center gap-2">✕ No AI assistance</li>
-                <li className="flex items-center gap-2">✕ Steep learning curve</li>
-                <li className="flex items-center gap-2">✕ No AI assistance</li>
-                <li className="flex items-center gap-2">✕ Moderate speeds</li>
-                <li className="flex items-center gap-2">✕ Partial UTF-8 support</li>
+                <li className="flex items-center gap-2">✕ No spatial visualization</li>
+                <li className="flex items-center gap-2">✕ High human error rate</li>
+                <li className="flex items-center gap-2">✕ Paper-based bottlenecks</li>
+                <li className="flex items-center gap-2">✕ No automated tracking</li>
+                <li className="flex items-center gap-2">✕ Difficult stock auditing</li>
+                <li className="flex items-center gap-2">✕ Prone to data loss</li>
               </ul>
             </div>
           </div>
@@ -386,57 +384,57 @@ export default function WarehouseLandingPage({ currentUser, setCurrentUser, onLo
         <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-center mb-32">
           <div className="h-[400px] rounded-[2rem] overflow-hidden">
             <img
-              src="https://images.unsplash.com/photo-1509281373149-e957c6296406?q=80&w=1000&auto=format&fit=crop"
-              alt="Testimonial Art"
+              src="https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?q=80&w=1000&auto=format&fit=crop"
+              alt="Automation Engineering"
               className="w-full h-full object-cover"
             />
           </div>
           <div>
             <blockquote className="text-2xl md:text-3xl font-serif leading-snug mb-8">
-              “I was skeptical, but Area has completely transformed the way I manage my business. The data visualizations are so clear and intuitive, and the platform is so easy to use. I can't imagine running my company without it.”
+              “Building and deploying KPA WMS has revolutionized how we understand warehouse automation. The combination of React Three Fiber and live MongoDB tracking makes inventory management incredibly intuitive and precise.”
             </blockquote>
-            <p className="font-semibold text-sm">John Smith</p>
-            <p className="text-xs text-gray-400 font-mono">Head of Data</p>
+            <p className="font-semibold text-sm">System Engineering Team</p>
+            <p className="text-xs text-gray-400 font-mono">KPA Warehouse Automation Project</p>
           </div>
         </div>
 
         {/* Part D: Map Your Success */}
         <div className="pt-12 border-t border-gray-200">
           <div className="flex justify-between items-center mb-12">
-            <h2 className="text-4xl font-serif">Map Your Success</h2>
-            <button className="bg-[#1e293b] text-white px-6 py-2.5 rounded-full text-xs hover:bg-black transition-all">
-              Discover More
+            <h2 className="text-4xl font-serif">Workflow Execution</h2>
+            <button onClick={() => setIsLoginOpen(true)} className="bg-[#1e293b] text-white px-6 py-2.5 rounded-full text-xs hover:bg-black transition-all cursor-pointer">
+              Sign In Now
             </button>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16">
             <div>
               <span className="text-6xl font-light text-gray-300 block mb-6">01</span>
-              <h3 className="font-semibold text-sm mb-2">Get Started</h3>
+              <h3 className="font-semibold text-sm mb-2">Inbound & Reception</h3>
               <p className="text-xs text-gray-500 leading-relaxed">
-                With our intuitive setup, you're up and running in minutes.
+                Vendors submit goods receipts; receptionists verify and confirm items for warehouse entry.
               </p>
             </div>
             <div>
               <span className="text-6xl font-light text-gray-300 block mb-6">02</span>
-              <h3 className="font-semibold text-sm mb-2">Customize and Configure</h3>
+              <h3 className="font-semibold text-sm mb-2">Planner Putaway</h3>
               <p className="text-xs text-gray-500 leading-relaxed">
-                Adapt Area to your specific requirements and preferences.
+                Planners allocate inventory into optimal racks and 9-slot pallet grids using smart recommendations.
               </p>
             </div>
             <div>
               <span className="text-6xl font-light text-gray-300 block mb-6">03</span>
-              <h3 className="font-semibold text-sm mb-2">Grow Your Business</h3>
+              <h3 className="font-semibold text-sm mb-2">Staff & Outbound</h3>
               <p className="text-xs text-gray-500 leading-relaxed">
-                Make informed decisions to exceed your goals.
+                Staff pick items efficiently and process outbound shipments with full system synchronization.
               </p>
             </div>
           </div>
 
           <div className="w-full h-[400px] rounded-[2rem] overflow-hidden">
             <img
-              src="https://images.unsplash.com/photo-1500382017468-9049fed747ef?q=80&w=2000&auto=format&fit=crop"
-              alt="Map landscape"
+              src="https://images.unsplash.com/photo-1578575437130-527eed3abbec?q=80&w=2000&auto=format&fit=crop"
+              alt="Warehouse Facility"
               className="w-full h-full object-cover"
             />
           </div>
@@ -444,12 +442,11 @@ export default function WarehouseLandingPage({ currentUser, setCurrentUser, onLo
 
       </section>
 
-
       {/* ================= 4. FOOTER ================= */}
       <footer id="contact" className="py-20 max-w-6xl mx-auto px-6 text-center border-t border-gray-200 scroll-mt-20">
         <h2 className="text-4xl font-serif mb-4">Connect with us</h2>
         <p className="text-xs text-gray-500 max-w-md mx-auto mb-8 leading-relaxed">
-          Schedule a quick call to learn how KPA Warehouse Automation System can work for you.
+          Experience the future of smart inventory control with KPA Warehouse Automation System.
         </p>
 
         <div className="mt-16 pt-8 border-t border-gray-200/60 flex flex-col md:flex-row justify-between items-center text-xs text-gray-400 gap-4">
@@ -460,7 +457,7 @@ export default function WarehouseLandingPage({ currentUser, setCurrentUser, onLo
 
           <div className="flex items-center gap-2">
             <span className="font-bold text-black text-lg">KPA</span>
-            <span>© KPA. 2026</span>
+            <span>© KPA WMS. 2026</span>
           </div>
 
           <div>All Rights Reserved</div>
