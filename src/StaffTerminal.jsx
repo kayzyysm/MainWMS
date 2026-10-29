@@ -1,22 +1,27 @@
-import React, { useState, useEffect } from 'react';
-import { ChevronUp, ArrowLeft, CheckCircle2, QrCode, ScanLine, Truck, MapPin, Sparkles, RefreshCw } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { ChevronUp, ArrowLeft, CheckCircle2, QrCode, ScanLine, Truck, MapPin, Sparkles, Scan, X, AlertTriangle } from 'lucide-react';
+import { Html5Qrcode } from 'html5-qrcode';
 
 export default function StaffTerminal({ currentUser, onLogout }) {
   const [readyReceipts, setReadyReceipts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedReceipt, setSelectedReceipt] = useState(null);
   const [selectedItem, setSelectedItem] = useState(null);
-  const [isScanning, setIsScanning] = useState(false);
+  
+  // State สำหรับควบคุมระบบกล้องสแกนจริง
+  const [scanStep, setScanStep] = useState(null); // 'slot' หรือ 'item'
+  const [scannedSlotTarget, setScannedSlotTarget] = useState(null); // เก็บค่า Slot ที่สแกนผ่านแล้ว
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const html5QrCodeRef = useRef(null);
   const [scanSuccess, setScanSuccess] = useState(false);
 
-  // ดึงข้อมูลใบเสร็จจาก Backend และกรองเฉพาะที่พร้อมจัดเก็บ (Ready to Pick)
+  // ดึงข้อมูลใบเสร็จจาก Backend (เฉพาะ Ready to Pick)
   const fetchReceipts = async () => {
     try {
       setLoading(true);
       const res = await fetch('https://mainwms-backend.onrender.com/api/receipts');
       if (res.ok) {
         const data = await res.json();
-        // กรองเฉพาะสถานะ Ready to Pick (หรือ Stored / Confirmed ตามที่เซ็ตไว้)
         const staffReady = data.filter(rec => rec.status === 'Ready to Pick');
 
         const formatted = staffReady.map(rec => ({
@@ -51,96 +56,182 @@ export default function StaffTerminal({ currentUser, onLogout }) {
   const handleOpenReceipt = (receipt) => {
     setSelectedReceipt(receipt);
     setSelectedItem(receipt.items.length > 0 ? receipt.items[0] : null);
+    setScannedSlotTarget(null);
     setScanSuccess(false);
   };
 
-  const handleMockScanItem = async () => {
-    if (!selectedItem || !selectedReceipt) return;
-    setIsScanning(true);
-
-    setTimeout(async () => {
-      setIsScanning(false);
-      setScanSuccess(true);
-
-      try {
-        // 1. แยกวิเคราะห์ข้อมูล Rack และ Slot จาก targetLocation เช่น "ZONE-A1 (Slot 1)"
-        const locString = selectedItem.targetLocation; // ตัวอย่าง: "ZONE-A1 (Slot 1)" หรือ "ZONE-A1"
-        const rackMatch = locString.match(/(ZONE-[A-Z0-9-]+)/);
-        const slotMatch = locString.match(/(Slot\s*\d+)/i);
-
-        if (rackMatch) {
-          const rackId = rackMatch[1];
-          const slotName = slotMatch ? slotMatch[1] : 'Slot 1';
-
-          // 2. ดึงข้อมูล Rack ปัจจุบันจาก Backend มาก่อนเพื่อเอาค่า slots เดิม
-          const rackRes = await fetch(`https://mainwms-backend.onrender.com/api/racks/${rackId}`);
-          if (rackRes.ok) {
-            const rackData = await rackRes.json();
-            const currentSlots = rackData.slots || {};
-            const targetSlotData = currentSlots[slotName] || { items: [] };
-            const currentItems = [...targetSlotData.items];
-
-            // 3. ตรวจสอบว่ามีสินค้านี้อยู่แล้วใน Slot หรือยัง ถ้ามีให้บวกจำนวนเพิ่ม
-            const existingItemIndex = currentItems.findIndex(i => i.name === selectedItem.name);
-            if (existingItemIndex > -1) {
-              currentItems[existingItemIndex] = {
-                ...currentItems[existingItemIndex],
-                qty: currentItems[existingItemIndex].qty + selectedItem.qty
-              };
-            } else {
-              currentItems.push({
-                name: selectedItem.name,
-                qty: selectedItem.qty,
-                itemId: selectedItem.id
-              });
-            }
-
-            currentSlots[slotName] = { items: currentItems };
-
-            // 4. บันทึกข้อมูลตู้ Rack ที่อัปเดตแล้วกลับเข้า MongoDB ผ่าน API PUT
-            await fetch(`https://mainwms-backend.onrender.com/api/racks/${rackId}`, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ slots: currentSlots })
-            });
-          }
+  // เปิดใช้งานกล้องมือถือจริง
+  const startCameraScan = (stepType) => {
+    setScanStep(stepType);
+    setIsScannerOpen(true);
+    setTimeout(() => {
+      const scannerId = "staff-qr-reader-container";
+      if (document.getElementById(scannerId)) {
+        if (!html5QrCodeRef.current) {
+          html5QrCodeRef.current = new Html5Qrcode(scannerId);
         }
-      } catch (err) {
-        console.error('Failed to update rack storage in DB:', err);
+        
+        const html5QrCode = html5QrCodeRef.current;
+        html5QrCode.start(
+          { facingMode: "environment" }, // ใช้กล้องหลัง
+          { fps: 10, qrbox: { width: 250, height: 250 } },
+          (decodedText) => {
+            handleScanResult(decodedText, stepType);
+            stopCameraScan();
+          },
+          (errorMessage) => {}
+        ).catch(err => {
+          console.error("Unable to start scanning.", err);
+          alert("ไม่สามารถเปิดกล้องได้ กรุณาตรวจสอบสิทธิ์กล้องของเบราว์เซอร์ (HTTPS Required)");
+          setIsScannerOpen(false);
+        });
+      }
+    }, 200);
+  };
+
+  const stopCameraScan = () => {
+    if (html5QrCodeRef.current) {
+      html5QrCodeRef.current.stop().then(() => {
+        html5QrCodeRef.current.clear();
+        setIsScannerOpen(false);
+      }).catch(err => {
+        setIsScannerOpen(false);
+      });
+    } else {
+      setIsScannerOpen(false);
+    }
+  };
+
+  // ตรวจสอบข้อความ QR Code ที่สแกนได้จากกล้องจริง
+  const handleScanResult = (decodedText, stepType) => {
+    const text = decodedText.trim();
+    
+    if (stepType === 'slot') {
+      // 1. ตรวจสอบ QR Code ประจำ Slot
+      const cleanScannedLoc = text.toUpperCase();
+      const cleanTargetLoc = (selectedItem?.targetLocation || '').toUpperCase();
+
+      if (cleanScannedLoc.includes(cleanTargetLoc) || cleanTargetLoc.includes(cleanScannedLoc)) {
+        setScannedSlotTarget(selectedItem.targetLocation);
+        alert(`✅ ยืนยันตำแหน่งถูกต้อง! คุณอยู่ที่ ${selectedItem.targetLocation}`);
+      } else {
+        alert(`❌ ยืนยันตำแหน่งไม่ถูกต้อง!\n\nคุณสแกนได้: "${text}"\nตำแหน่งที่ถูกต้องคือ: "${selectedItem.targetLocation}"`);
       }
 
-      setTimeout(async () => {
-        const updatedItems = selectedReceipt.items.filter(i => i.id !== selectedItem.id);
+    } else if (stepType === 'item') {
+      // 2. สแกนตัวสินค้า + อัปเดต DB
+      executePutawayStorage();
+    }
+  };
 
-        if (updatedItems.length === 0) {
-          // ถ้าจัดเก็บครบทุกชิ้นแล้ว ให้ยิง API อัปเดตสถานะใบเสร็จเป็น 'Completed' ลง MongoDB
-          try {
-            await fetch(`https://mainwms-backend.onrender.com/api/receipts/${selectedReceipt.id}/status`, {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ status: 'Completed' })
+  // บันทึกจัดเก็บเข้า MongoDB
+  const executePutawayStorage = async () => {
+    if (!selectedItem || !selectedReceipt) return;
+    setScanSuccess(true);
+
+    try {
+      const locString = selectedItem.targetLocation;
+      const rackMatch = locString.match(/(ZONE-[A-Z0-9-]+)/);
+      const slotMatch = locString.match(/(Slot\s*\d+)/i);
+
+      if (rackMatch) {
+        const rackId = rackMatch[1];
+        const slotName = slotMatch ? slotMatch[1] : 'Slot 1';
+
+        const rackRes = await fetch(`https://mainwms-backend.onrender.com/api/racks/${rackId}`);
+        if (rackRes.ok) {
+          const rackData = await rackRes.json();
+          const currentSlots = rackData.slots || {};
+          const targetSlotData = currentSlots[slotName] || { items: [] };
+          const currentItems = [...targetSlotData.items];
+
+          const existingItemIndex = currentItems.findIndex(i => i.name === selectedItem.name);
+          if (existingItemIndex > -1) {
+            currentItems[existingItemIndex] = {
+              ...currentItems[existingItemIndex],
+              qty: currentItems[existingItemIndex].qty + selectedItem.qty
+            };
+          } else {
+            currentItems.push({
+              name: selectedItem.name,
+              qty: selectedItem.qty,
+              itemId: selectedItem.id
             });
-          } catch (err) {
-            console.error('Failed to update receipt status to Completed:', err);
           }
 
-          setReadyReceipts(prev => prev.filter(r => r.id !== selectedReceipt.id));
-          setSelectedReceipt(null);
-          setSelectedItem(null);
-        } else {
-          const updatedReceipt = { ...selectedReceipt, items: updatedItems };
-          setSelectedReceipt(updatedReceipt);
-          setReadyReceipts(prev => prev.map(r => r.id === updatedReceipt.id ? updatedReceipt : r));
-          setSelectedItem(updatedItems[0]);
+          currentSlots[slotName] = { items: currentItems };
+
+          await fetch(`https://mainwms-backend.onrender.com/api/racks/${rackId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ slots: currentSlots })
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Failed to update rack storage in DB:', err);
+    }
+
+    // ตัดรายการออกจากใบเสร็จ
+    setTimeout(async () => {
+      const updatedItems = selectedReceipt.items.filter(i => i.id !== selectedItem.id);
+
+      if (updatedItems.length === 0) {
+        try {
+          await fetch(`https://mainwms-backend.onrender.com/api/receipts/${selectedReceipt.id}/status`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 'Completed' })
+          });
+        } catch (err) {
+          console.error('Failed to update receipt status to Completed:', err);
         }
 
-        setScanSuccess(false);
-      }, 800);
-    }, 800);
+        setReadyReceipts(prev => prev.filter(r => r.id !== selectedReceipt.id));
+        setSelectedReceipt(null);
+        setSelectedItem(null);
+        setScannedSlotTarget(null);
+      } else {
+        const updatedReceipt = { ...selectedReceipt, items: updatedItems };
+        setSelectedReceipt(updatedReceipt);
+        setReadyReceipts(prev => prev.map(r => r.id === updatedReceipt.id ? updatedReceipt : r));
+        setSelectedItem(updatedItems[0]);
+        setScannedSlotTarget(null);
+      }
+
+      setScanSuccess(false);
+    }, 1000);
   };
 
   return (
-    <div className="p-6 bg-slate-900 min-h-screen font-sans flex gap-6">
+    <div className="p-6 bg-slate-900 min-h-screen font-sans flex gap-6 relative">
+
+      {/* ================= MODAL กล้องสแกนจริง ================= */}
+      {isScannerOpen && (
+        <div className="fixed inset-0 bg-black/90 z-50 flex flex-col items-center justify-center p-4">
+          <div className="w-full max-w-sm bg-slate-800 rounded-3xl p-4 shadow-2xl border border-slate-700 flex flex-col items-center">
+            <div className="w-full flex justify-between items-center mb-3">
+              <h3 className="text-white font-bold text-sm tracking-wide">
+                {scanStep === 'slot' ? 'สแกน QR Code ประจำ Slot ที่ชั้น' : 'สแกน QR Code สินค้า'}
+              </h3>
+              <button 
+                onClick={stopCameraScan} 
+                className="bg-rose-500/20 text-rose-400 p-2 rounded-full hover:bg-rose-500/30 transition cursor-pointer"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div id="staff-qr-reader-container" className="w-full overflow-hidden rounded-2xl bg-black"></div>
+            
+            <p className="text-slate-400 text-xs text-center mt-3 leading-relaxed">
+              {scanStep === 'slot' 
+                ? 'ส่องกล้องไปที่ QR Code หน้าตู้ชั้นวางเพื่อยืนยันจุดจัดวาง' 
+                : 'ส่องกล้องไปที่ QR Code บนสติกเกอร์กล่องสินค้าเพื่อหักยอดเข้าคลัง'}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* 1. LEFT SIDEBAR */}
       <div className="w-[320px] lg:w-[380px] h-[calc(100vh-3rem)] sticky top-6 bg-[#0b0f19] text-white flex flex-col justify-between p-8 shrink-0 overflow-hidden rounded-3xl border border-slate-800 shadow-xl">
@@ -188,7 +279,7 @@ export default function StaffTerminal({ currentUser, onLogout }) {
             </div>
             {selectedReceipt && (
               <button
-                onClick={() => { setSelectedReceipt(null); setSelectedItem(null); }}
+                onClick={() => { setSelectedReceipt(null); setSelectedItem(null); setScannedSlotTarget(null); }}
                 className="bg-slate-800 hover:bg-slate-700 text-white text-xs px-4 py-2 rounded-xl font-bold transition cursor-pointer flex items-center gap-1.5 border border-slate-700"
               >
                 <ArrowLeft size={14} /> กลับหน้ารายการ
@@ -243,13 +334,14 @@ export default function StaffTerminal({ currentUser, onLogout }) {
           ) : (
             <div className="flex gap-6">
 
+              {/* ซ้าย: รายการสินค้าในใบเสร็จ */}
               <div className="flex-1 bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
                 <div className="flex justify-between items-center mb-4 pb-3 border-b border-slate-100">
                   <div>
                     <h3 className="font-black text-slate-800 text-sm">
                       ใบเสร็จ: {selectedReceipt.receiptId} <span className="text-slate-400 font-normal">[{selectedReceipt.code}]</span>
                     </h3>
-                    <p className="text-[11px] text-slate-500 mt-0.5">คลิกเลือกรายการเพื่อสแกน QR Code ยืนยันการจัดเก็บ</p>
+                    <p className="text-[11px] text-slate-500 mt-0.5">เลือกรายการสินค้าเพื่อเริ่มกระบวนการสแกน Slot และตัวสินค้า</p>
                   </div>
                   <span className="text-xs font-bold bg-amber-50 text-amber-700 px-3 py-1 rounded-xl border border-amber-200">
                     เหลือ {selectedReceipt.items.length} รายการ
@@ -262,7 +354,7 @@ export default function StaffTerminal({ currentUser, onLogout }) {
                     return (
                       <div
                         key={item.id}
-                        onClick={() => setSelectedItem(item)}
+                        onClick={() => { setSelectedItem(item); setScannedSlotTarget(null); }}
                         className={`border rounded-2xl p-4 transition cursor-pointer shadow-sm flex items-center justify-between ${isSelected
                           ? 'border-emerald-500 bg-emerald-50/70 ring-2 ring-emerald-400 shadow-md'
                           : 'border-slate-200 bg-slate-50 hover:border-slate-300'
@@ -275,7 +367,7 @@ export default function StaffTerminal({ currentUser, onLogout }) {
                           </div>
                           <div className="flex items-center gap-2 mt-2">
                             <span className="text-xs text-slate-600 flex items-center gap-1 font-semibold">
-                              <MapPin size={12} className="text-emerald-500" /> {item.targetLocation}
+                              <MapPin size={12} className="text-emerald-500" /> เป้าหมาย: {item.targetLocation}
                             </span>
                             <span className="text-[10px] bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-0.5 rounded-md font-bold flex items-center gap-1">
                               <Sparkles size={10} /> {item.actionLabel}
@@ -293,59 +385,80 @@ export default function StaffTerminal({ currentUser, onLogout }) {
                 </div>
               </div>
 
-              <div className="w-[360px] bg-white rounded-2xl p-6 shadow-sm border border-slate-200 flex flex-col justify-between text-center">
+              {/* ขวา: แผงสแกนกล้องจริง 2 สเต็ป */}
+              <div className="w-[380px] bg-white rounded-2xl p-6 shadow-sm border border-slate-200 flex flex-col justify-between">
                 <div>
-                  <div className="w-16 h-16 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-emerald-200">
-                    <QrCode size={32} />
+                  <div className="w-14 h-14 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-3 border border-emerald-200">
+                    <QrCode size={28} />
                   </div>
 
-                  <h3 className="font-black text-slate-800 text-sm mb-1">สแกน QR Code ยืนยันตำแหน่ง</h3>
+                  <h3 className="font-black text-slate-800 text-sm mb-1 text-center">สแกนจัดเก็บด้วยกล้องจริง (Putaway)</h3>
 
                   {selectedItem ? (
-                    <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 my-3 text-left">
-                      <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1">รายการที่เลือกสแกน:</p>
-                      <p className="text-xs font-bold text-slate-900 truncate">{selectedItem.name}</p>
-                      <p className="text-xs text-emerald-600 font-bold mt-1">📍 ตำแหน่ง: {selectedItem.targetLocation}</p>
-                      <div className="mt-2 pt-2 border-t border-slate-200/60 flex justify-between text-[11px]">
-                        <span className="text-slate-500">รูปแบบ: <b>{selectedItem.actionLabel}</b></span>
-                        <span className="text-slate-800 font-bold">{selectedItem.qty} ชิ้น</span>
+                    <div className="space-y-3 mt-3">
+                      <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3.5 text-left">
+                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">รายการที่เลือก:</p>
+                        <p className="text-xs font-bold text-slate-900 truncate">{selectedItem.name}</p>
+                        <p className="text-xs text-emerald-600 font-bold mt-1">📍 ตำแหน่งเป้าหมาย: {selectedItem.targetLocation}</p>
                       </div>
+
+                      {/* สเต็ป 1: สแกนป้าย Slot ที่ตู้ */}
+                      <div className={`border rounded-2xl p-3.5 transition ${scannedSlotTarget ? 'bg-emerald-50/80 border-emerald-400' : 'bg-indigo-50/60 border-indigo-200'}`}>
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="text-xs font-bold text-slate-800">
+                            สเต็ป 1: สแกนป้าย Slot หน้าตู้
+                          </span>
+                          {scannedSlotTarget ? (
+                            <span className="text-[10px] bg-emerald-600 text-white px-2 py-0.5 rounded font-bold">ยืนยันแล้ว ✓</span>
+                          ) : (
+                            <span className="text-[10px] bg-indigo-600 text-white px-2 py-0.5 rounded font-bold animate-pulse">รอสแกนป้าย</span>
+                          )}
+                        </div>
+
+                        {scannedSlotTarget ? (
+                          <p className="text-xs text-emerald-800 font-bold">📍 ยืนยันตำแหน่ง {scannedSlotTarget} เรียบร้อย</p>
+                        ) : (
+                          <button
+                            onClick={() => startCameraScan('slot')}
+                            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-2.5 rounded-xl transition cursor-pointer flex items-center justify-center gap-2 shadow mt-1 active:scale-95"
+                          >
+                            <Scan size={16} /> เปิดกล้องสแกนป้าย Slot
+                          </button>
+                        )}
+                      </div>
+
+                      {/* สเต็ป 2: สแกนตัวสินค้า */}
+                      <div className={`border rounded-2xl p-3.5 transition ${!scannedSlotTarget ? 'opacity-50 bg-slate-50 border-slate-200' : 'bg-emerald-50/80 border-emerald-400'}`}>
+                        <span className="text-xs font-bold text-slate-800 block mb-2">
+                          สเต็ป 2: สแกนตัวสินค้าเพื่อหักยอด
+                        </span>
+
+                        {scanSuccess ? (
+                          <div className="bg-emerald-600 text-white rounded-xl p-2.5 text-xs font-bold flex items-center justify-center gap-1.5 animate-bounce">
+                            <CheckCircle2 size={16} /> จัดเก็บสำเร็จ! ตัดยอดเข้าคลังแล้ว
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => startCameraScan('item')}
+                            disabled={!scannedSlotTarget}
+                            className={`w-full text-xs font-bold py-2.5 rounded-xl transition flex items-center justify-center gap-2 shadow active:scale-95 ${!scannedSlotTarget ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none' : 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer'}`}
+                          >
+                            <ScanLine size={16} /> เปิดกล้องสแกนสินค้า
+                          </button>
+                        )}
+                      </div>
+
                     </div>
                   ) : (
-                    <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-xl p-3 my-4 font-medium">
+                    <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-xl p-3 my-4 font-medium text-center">
                       ⚠️ เลือกรายการสินค้าทางซ้ายเพื่อเริ่มสแกน
                     </p>
                   )}
-
-                  {scanSuccess && (
-                    <div className="bg-emerald-50 border border-emerald-300 text-emerald-700 rounded-2xl p-3 text-xs font-bold mb-4 animate-fade-in flex items-center justify-center gap-2">
-                      <CheckCircle2 size={16} /> สแกนสำเร็จ! นำสินค้าขึ้นชั้นเรียบร้อย
-                    </div>
-                  )}
                 </div>
 
-                <button
-                  onClick={handleMockScanItem}
-                  disabled={!selectedItem || isScanning || scanSuccess}
-                  className={`w-full py-3.5 rounded-xl font-bold shadow-lg transition text-sm flex items-center justify-center gap-2 cursor-pointer ${!selectedItem
-                    ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
-                    : scanSuccess
-                      ? 'bg-emerald-600 text-white'
-                      : isScanning
-                        ? 'bg-slate-300 text-slate-500 cursor-wait'
-                        : 'bg-emerald-500 hover:bg-emerald-600 text-white transform hover:scale-[1.02]'
-                    }`}
-                >
-                  {isScanning ? (
-                    'กำลังตรวจสอบ QR Code...'
-                  ) : scanSuccess ? (
-                    'จัดเก็บเรียบร้อย!'
-                  ) : (
-                    <>
-                      <ScanLine size={16} /> สแกนยืนยันจัดเก็บชิ้นนี้
-                    </>
-                  )}
-                </button>
+                <div className="text-[11px] text-slate-400 text-center mt-3 pt-2 border-t border-slate-100">
+                  ระบบตรวจสอบพิกัดและตัดสต็อกอัตโนมัติ (Live MongoDB)
+                </div>
               </div>
 
             </div>
