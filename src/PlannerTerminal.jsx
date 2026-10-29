@@ -192,11 +192,11 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
     setViewMode('organize');
   };
 
-  // 📌 แก้ไขจุดนี้: ป้องกันการเซ็ตค่าตำแหน่งเริ่มต้นอัตโนมัติ ให้ User ต้องคลิกเลือกเอง
+  // 📌 แก้ไขจุดนี้: เซ็ตเป็น null เสมอ เพื่อบังคับให้ User ต้องคลิกเลือกช่องเอง ห้ามออโต้เลือกตัวแรก
   const handleSelectItem = (item) => {
     setSelectedItemToStore(item);
     setSmartInputQty(Math.min(item.qty, MAX_PALLET_CAPACITY));
-    setSmartTargetLocation(null); // บังคับให้เป็นค่าว่างเพื่อให้ User เลือกเอง ป้องกันเด้งไป Slot 1
+    setSmartTargetLocation(null); 
     setIsSmartModalOpen(true);
   };
 
@@ -328,6 +328,8 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
 
   const handleSwitchToManual = () => {
     setIsSmartModalOpen(false);
+    setTargetRackId(null);
+    setSelectedSlotForAction(null);
   };
 
   const handleRackClick = (rackId) => {
@@ -361,6 +363,10 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
   };
 
   const confirmStoreToSlot = async () => {
+    if (!selectedSlotForAction) {
+      alert('⚠️ กรุณาคลิกเลือก Slot ที่ต้องการ');
+      return;
+    }
     const success = await executeStore(targetRackId, selectedSlotForAction, inputQty);
     if (success) {
       setSelectedSlotForAction(null);
@@ -675,7 +681,7 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
                   <Sparkles size={20} />
                 </div>
                 <div>
-                  <h3 className="font-black text-slate-800 text-base">กรุณาเลือกตำแหน่งจัดเก็บสินค้า</h3>
+                  <h3 className="font-black text-slate-800 text-base">กรุณาคลิกเลือกตำแหน่งจัดเก็บ</h3>
                   <p className="text-xs text-indigo-600 font-bold">{selectedItemToStore.name} (คงเหลือ {selectedItemToStore.qty} ชิ้น)</p>
                 </div>
               </div>
@@ -692,7 +698,7 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
                   <div>
                     <p className="text-xs font-bold text-slate-700 mb-2.5 flex items-center gap-1.5">
                       <MapPin size={14} className="text-indigo-600" /> 
-                      {existingLocs.length > 0 ? 'ตำแหน่งปัจจุบันของสินค้านี้ในคลัง (คลิกเลือกช่องที่ต้องการ):' : '✨ ตำแหน่งที่ว่างและแนะนำ (คลิกเลือกช่องที่ต้องการ):'}
+                      {existingLocs.length > 0 ? 'ตำแหน่งเดิมของสินค้านี้ (คลิกเลือกช่องที่ต้องการ):' : '✨ ช่องว่างที่แนะนำ (คลิกเลือกช่องที่ต้องการ):'}
                     </p>
 
                     {displayLocs.length === 0 ? (
