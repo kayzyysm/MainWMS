@@ -160,21 +160,6 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
     handleSelectReceipt(randomReceipt);
   };
 
-  // ฟังก์ชันสแกนแบบกดปุ่มจำลองทีละ 1 ชิ้น (สำรองกรณีกล้องมีปัญหา)
-  const handleScanItem = (index, e) => {
-    e.stopPropagation();
-    setCurrentReceiptItems(prev => {
-      const updated = [...prev];
-      if (updated[index].qty > 0) {
-        updated[index] = {
-          ...updated[index],
-          qty: updated[index].qty - 1
-        };
-      }
-      return updated;
-    });
-  };
-
   // เช็คว่าสินค้าทุกชิ้นในใบเสร็จถูกสแกนครบจำนวนหรือยัง
   const allScanned = currentReceiptItems.length > 0 && currentReceiptItems.every(item => item.qty === 0);
 
@@ -439,15 +424,15 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
                         <div className="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-0 border-slate-200">
                           <span className="text-xs font-semibold text-slate-500">{item.weight}</span>
                           <button
-                            onClick={(e) => handleScanItem(idx, e)}
+                            onClick={startCameraScan}
                             disabled={isCompleted}
-                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1 shadow ${
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow ${
                               isCompleted
                                 ? 'bg-emerald-200 text-emerald-700 cursor-not-allowed shadow-none'
-                                : 'bg-slate-800 hover:bg-slate-700 text-white cursor-pointer active:scale-95'
+                                : 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer active:scale-95'
                             }`}
                           >
-                            คลิกสแกนจำลอง
+                            <Scan size={14} /> สแกนด้วยกล้อง
                           </button>
                         </div>
                       </div>
