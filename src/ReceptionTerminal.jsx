@@ -49,13 +49,13 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
         if (!html5QrCodeRef.current) {
           html5QrCodeRef.current = new Html5Qrcode(scannerId);
         }
-        
+
         const html5QrCode = html5QrCodeRef.current;
         html5QrCode.start(
           { facingMode: "environment" }, // ใช้กล้องหลังมือถือ
           { fps: 10, qrbox: { width: 240, height: 240 } },
           (decodedText) => {
-            // เมื่อสแกน QR โค้ดสำเร็จ (เช่น ค่าตรงกับ SKU หรือ รหัสสินค้า)
+            // เมื่อสแกน QR โค้ดสำเร็จจากสติกเกอร์
             handleSuccessfulScan(decodedText);
             stopCameraScan();
           },
@@ -86,11 +86,22 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
     }
   };
 
-  // จัดการเมื่อสแกน QR Code ตรงกับสินค้าชิ้นไหนในรายการ
+  // จัดการเมื่อสแกน QR Code สำเร็จ (รองรับรูปแบบ WH-INV-xxxxxx-SKU)
   const handleSuccessfulScan = (scannedText) => {
-    const matchedIndex = currentReceiptItems.findIndex(item => 
-      item.id?.toLowerCase() === scannedText.toLowerCase() || 
-      item.name?.toLowerCase().includes(scannedText.toLowerCase())
+    console.log("Scanned QR Text:", scannedText);
+    let targetSku = scannedText.trim();
+
+    // ถอดรหัสสติกเกอร์ เช่น WH-INV-763959-PRD-001 -> ดึงเอาเฉพาะ SKU ด้านหลัง (PRD-001)
+    if (targetSku.includes('-')) {
+      const parts = targetSku.split('-');
+      // ดึง 2 ส่วนท้ายมารวมกันเป็น SKU (เช่น PRD-001)
+      targetSku = parts.slice(-2).join('-');
+    }
+
+    // ค้นหาสินค้าในเช็คลิสต์ที่ SKU ตรงกัน
+    const matchedIndex = currentReceiptItems.findIndex(item =>
+      item.id?.toLowerCase() === targetSku.toLowerCase() ||
+      scannedText.toLowerCase().includes(item.id?.toLowerCase())
     );
 
     if (matchedIndex > -1) {
@@ -104,9 +115,9 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
         }
         return updated;
       });
-      alert(`สแกนสำเร็จ: ${currentReceiptItems[matchedIndex].name}`);
+      alert(`สแกนสำเร็จ: ${currentReceiptItems[matchedIndex].name} (${targetSku}) ตัดยอดเหลือ ${Math.max(0, currentReceiptItems[matchedIndex].qty - 1)} ชิ้น`);
     } else {
-      alert(`ไม่พบสินค้าที่ตรงกับรหัส "${scannedText}" ในใบเสร็จนี้`);
+      alert(`ไม่พบสินค้า SKU "${targetSku}" (จาก QR: ${scannedText}) ในใบเสร็จนี้`);
     }
   };
 
@@ -120,17 +131,53 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
   });
 
   // เมื่อเลือกใบเสร็จ
-  const handleSelectReceipt = (rec) => {
-    setSelectedReceipt(rec);
-    const formattedItems = (rec.items || []).map(item => ({
-      name: item.productName || item.name,
-      id: item.id,
-      qty: item.quantity || item.qty,
-      initialQty: item.quantity || item.qty,
-      weight: `${item.totalWeight || item.weight || '0'} KG`
-    }));
-    setCurrentReceiptItems(formattedItems);
-    setViewMode('detail');
+  // จัดการเมื่อสแกน QR Code จากสติกเกอร์จริง (เช็กเลขใบเสร็จ + ตัดยอด SKU)
+  const handleSuccessfulScan = (scannedText) => {
+    console.log("Scanned QR Text:", scannedText);
+    const text = scannedText.trim();
+
+    // รูปแบบสติกเกอร์ของคุณคือ: WH-INV-xxxxxx-PRD-001
+    // แยกส่วนด้วยเครื่องหมายขีด (-)
+    const parts = text.split('-');
+
+    if (parts.length >= 4) {
+      // ดึงเลขที่ใบเสร็จออกจาก QR เช่น ["WH", "INV", "763959", "PRD", "001"] -> docNo = WH-INV-763959
+      const scannedDocNo = `${parts[0]}-${parts[1]}-${parts[2]}`;
+      // ดึงรหัส SKU เช่น "PRD-001"
+      const scannedSku = `${parts[3]}-${parts[4]}`;
+
+      // 1. เช็กความถูกต้อง: เลขใบเสร็จใน QR ต้องตรงกับใบเสร็จที่กำลังเปิดเช็กอยู่ตอนนี้
+      const activeDocNo = selectedReceipt?.docNo || selectedReceipt?.receiptId;
+      if (activeDocNo && scannedDocNo !== activeDocNo) {
+        alert(`❌ ผิดพลาด! สติกเกอร์นี้เป็นของใบเสร็จ "${scannedDocNo}" แต่คุณกำลังตรวจรับใบเสร็จ "${activeDocNo}" อยู่`);
+        return;
+      }
+
+      // 2. ค้นหาสินค้าในเช็คลิสต์ของใบเสร็จนี้
+      const matchedIndex = currentReceiptItems.findIndex(item =>
+        item.id?.toLowerCase() === scannedSku.toLowerCase()
+      );
+
+      if (matchedIndex > -1) {
+        setCurrentReceiptItems(prev => {
+          const updated = [...prev];
+          if (updated[matchedIndex].qty > 0) {
+            updated[matchedIndex] = {
+              ...updated[matchedIndex],
+              qty: updated[matchedIndex].qty - 1
+            };
+          }
+          return updated;
+        });
+        alert(`✅ สแกนสำเร็จ: ${currentReceiptItems[matchedIndex].name} (${scannedSku}) ตัดยอดเหลือ ${Math.max(0, currentReceiptItems[matchedIndex].qty - 1)} ชิ้น`);
+      } else {
+        alert(`⚠️ ไม่พบสินค้า SKU "${scannedSku}" ในใบเสร็จนี้`);
+      }
+
+    } else {
+      // เผื่อกรณีสแกนพลาดหรือรูปแบบสตริงไม่ตรง
+      alert(`⚠️ รูปแบบ QR Code ไม่ถูกต้อง: "${text}"`);
+    }
   };
 
   const handleScanGlobal = () => {
@@ -186,24 +233,24 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
 
   return (
     <div className="p-3 sm:p-6 bg-slate-900 min-h-screen font-sans flex flex-col lg:flex-row gap-4 sm:gap-6 relative">
-      
+
       {/* ================= MODAL กล้องสแกนจริง ================= */}
       {isScannerOpen && (
         <div className="fixed inset-0 bg-black/90 z-50 flex flex-col items-center justify-center p-4">
           <div className="w-full max-w-sm bg-slate-800 rounded-3xl p-4 shadow-2xl border border-slate-700 flex flex-col items-center">
             <div className="w-full flex justify-between items-center mb-3">
               <h3 className="text-white font-bold text-sm tracking-wide">สแกน QR Code สินค้า</h3>
-              <button 
-                onClick={stopCameraScan} 
+              <button
+                onClick={stopCameraScan}
                 className="bg-rose-500/20 text-rose-400 p-2 rounded-full hover:bg-rose-500/30 transition cursor-pointer"
               >
                 <X size={20} />
               </button>
             </div>
-            
+
             {/* กรอบแสดงวิดีโอจากกล้อง */}
             <div id="qr-reader-container" className="w-full overflow-hidden rounded-2xl bg-black"></div>
-            
+
             <p className="text-slate-400 text-xs text-center mt-3 leading-relaxed">
               ส่องกล้องไปที่ QR Code บนสติกเกอร์กล่องสินค้าเพื่อตัดยอดอัตโนมัติ
             </p>
@@ -231,7 +278,7 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
               W M S
             </p>
           </div>
-          
+
           <div className="bg-[#1a233a]/90 backdrop-blur-md border border-slate-700/60 rounded-full px-4 py-2 lg:hidden flex items-center gap-2 shadow-lg">
             <span className="text-xs font-semibold text-slate-200">
               {currentUser?.username || 'Receipt001'}
@@ -266,7 +313,7 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
 
       {/* ================= 2. RIGHT MAIN CONTENT AREA ================= */}
       <div className="flex-1 mx-auto w-full bg-slate-100 rounded-2xl sm:rounded-3xl border-2 sm:border-4 border-slate-700 shadow-2xl overflow-hidden p-4 sm:p-6 flex flex-col justify-between">
-        
+
         <div>
           {/* Top Header Bar */}
           <div className="bg-slate-900 text-white px-4 sm:px-8 py-4 sm:py-5 rounded-xl sm:rounded-2xl mb-4 sm:mb-6 flex justify-between items-center shadow-md border border-slate-800">
@@ -280,13 +327,13 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
 
           {/* Dynamic Content Container */}
           <div className="bg-white rounded-xl sm:rounded-2xl p-4 sm:p-6 shadow-sm border border-slate-200 min-h-[450px] sm:min-h-[520px] flex flex-col justify-between">
-            
+
             {viewMode === 'list' ? (
               /* VIEW 1: RECEPTION TERMINAL LIST */
               <div>
                 <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 sm:gap-4 mb-4 sm:mb-6">
                   <h3 className="text-base sm:text-lg font-black text-slate-900 tracking-wider">RECEPTION TERMINAL</h3>
-                  
+
                   <div className="flex items-center gap-2 w-full sm:w-auto">
                     <div className="relative flex-1 sm:w-72">
                       <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -395,14 +442,12 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
                     return (
                       <div
                         key={idx}
-                        className={`border rounded-xl sm:rounded-2xl p-3 sm:px-6 sm:py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm transition ${
-                          isCompleted ? 'bg-emerald-50/70 border-emerald-300' : 'bg-slate-50 border-slate-200'
-                        }`}
+                        className={`border rounded-xl sm:rounded-2xl p-3 sm:px-6 sm:py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm transition ${isCompleted ? 'bg-emerald-50/70 border-emerald-300' : 'bg-slate-50 border-slate-200'
+                          }`}
                       >
                         <div className="flex items-start sm:items-center gap-3 sm:gap-4">
-                          <div className={`w-6 h-6 rounded-lg border flex items-center justify-center shrink-0 mt-0.5 sm:mt-0 transition ${
-                            isCompleted ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-slate-300 bg-white text-slate-400'
-                          }`}>
+                          <div className={`w-6 h-6 rounded-lg border flex items-center justify-center shrink-0 mt-0.5 sm:mt-0 transition ${isCompleted ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-slate-300 bg-white text-slate-400'
+                            }`}>
                             {isCompleted ? <Check size={14} strokeWidth={3} /> : <Package size={14} />}
                           </div>
                           <div>
@@ -420,11 +465,10 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
                           <button
                             onClick={(e) => handleScanItem(idx, e)}
                             disabled={isCompleted}
-                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1 shadow ${
-                              isCompleted
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1 shadow ${isCompleted
                                 ? 'bg-emerald-200 text-emerald-700 cursor-not-allowed shadow-none'
                                 : 'bg-slate-800 hover:bg-slate-700 text-white cursor-pointer active:scale-95'
-                            }`}
+                              }`}
                           >
                             คลิกสแกนจำลอง
                           </button>
@@ -442,11 +486,10 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
                   <button
                     onClick={handleApprove}
                     disabled={!allScanned}
-                    className={`w-full sm:w-auto px-8 py-3 rounded-xl font-bold shadow-lg transition text-sm flex items-center justify-center gap-2 ${
-                      allScanned
+                    className={`w-full sm:w-auto px-8 py-3 rounded-xl font-bold shadow-lg transition text-sm flex items-center justify-center gap-2 ${allScanned
                         ? 'bg-emerald-500 hover:bg-emerald-600 text-white cursor-pointer transform hover:scale-105'
                         : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
-                    }`}
+                      }`}
                   >
                     APPROVE
                   </button>
@@ -454,7 +497,7 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
               </div>
             )}
 
-          </div> 
+          </div>
         </div>
 
       </div>
