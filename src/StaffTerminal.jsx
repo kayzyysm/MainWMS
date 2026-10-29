@@ -102,19 +102,39 @@ export default function StaffTerminal({ currentUser, onLogout }) {
     }
   };
 
-  // ตรวจสอบข้อความ QR Code ที่สแกนได้จากกล้องจริง
+  // ตรวจสอบข้อความ QR Code ที่สแกนได้จากกล้องจริง (รองรับทั้งรูปแบบ PDF และข้อความระบบ)
   const handleScanResult = (decodedText, stepType) => {
     const text = decodedText.trim();
     
     if (stepType === 'slot') {
-      const cleanScannedLoc = text.toUpperCase();
-      const cleanTargetLoc = (selectedItem?.targetLocation || '').toUpperCase();
+      const cleanScanned = text.toUpperCase().replace(/[\s\(\)]/g, ''); // ตัดช่องว่างและวงเล็บออก เช่น "ZONE-A1(SLOT1)"
+      const targetLoc = (selectedItem?.targetLocation || '').toUpperCase();
+      const cleanTarget = targetLoc.replace(/[\s\(\)]/g, '');
 
-      if (cleanScannedLoc.includes(cleanTargetLoc) || cleanTargetLoc.includes(cleanScannedLoc)) {
+      // ดึงโซนและเลข Slot ออกมาเทียบกันโดยตรง เพื่อความแม่นยำสูงสุด
+      const scannedMatch = text.match(/(ZONE-[A-Z0-9]+).*?(\d+)/i);
+      const targetMatch = targetLoc.match(/(ZONE-[A-Z0-9]+).*?(\d+)/i);
+
+      let isMatch = false;
+      if (cleanScanned.includes(cleanTarget) || cleanTarget.includes(cleanScanned)) {
+        isMatch = true;
+      } else if (scannedMatch && targetMatch) {
+        const scannedZone = scannedMatch[1];
+        const scannedSlotNum = parseInt(scannedMatch[2], 10);
+        
+        const targetZone = targetMatch[1];
+        const targetSlotNum = parseInt(targetMatch[2], 10);
+
+        if (scannedZone === targetZone && scannedSlotNum === targetSlotNum) {
+          isMatch = true;
+        }
+      }
+
+      if (isMatch) {
         setScannedSlotTarget(selectedItem.targetLocation);
         alert(`✅ ยืนยันตำแหน่งถูกต้อง! คุณอยู่ที่ ${selectedItem.targetLocation}`);
       } else {
-        alert(`❌ ยืนยันตำแหน่งไม่ถูกต้อง!\n\nคุณสแกนได้: "${text}"\nตำแหน่งที่ถูกต้องคือ: "${selectedItem.targetLocation}"`);
+        alert(`❌ ยืนยันตำแหน่งไม่ถูกต้อง!\n\nคุณสแกนได้: "${text}"\nตำแหน่งที่ต้องการคือ: "${selectedItem.targetLocation}"`);
       }
 
     } else if (stepType === 'item') {
