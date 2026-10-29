@@ -17,7 +17,7 @@ export default function StaffTerminal({ currentUser, onLogout }) {
       if (res.ok) {
         const data = await res.json();
         // กรองเฉพาะสถานะ Ready to Pick (หรือ Stored / Confirmed ตามที่เซ็ตไว้)
-        const staffReady = data.filter(rec => rec.status === 'Ready to Pick' || rec.status === 'Stored' || rec.status === 'Confirmed');
+        const staffReady = data.filter(rec => rec.status === 'Ready to Pick');
 
         const formatted = staffReady.map(rec => ({
           id: rec._id,
