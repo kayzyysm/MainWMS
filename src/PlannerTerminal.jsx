@@ -52,7 +52,7 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
     'Slot 7', 'Slot 8', 'Slot 9'
   ];
 
-  // 1. ดึงข้อมูลใบเสร็จจาก MongoDB (เฉพาะที่ได้รับการยืนยันหรือรอจัดเก็บตาม Flow จริง)
+  // 1. ดึงข้อมูลใบเสร็จจาก MongoDB
   useEffect(() => {
     const fetchReceipts = async () => {
       try {
@@ -60,7 +60,6 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
         const res = await fetch('https://mainwms-backend.onrender.com/api/receipts');
         if (res.ok) {
           const data = await res.json();
-          // กรองเอาเฉพาะใบเสร็จที่ Reception กด Approve / Confirmed แล้วเท่านั้น
           const confirmedReceipts = data.filter(rec => rec.status === 'Confirmed');
           setPlannerReceipts(confirmedReceipts);
         }
@@ -81,8 +80,6 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
         const res = await fetch('https://mainwms-backend.onrender.com/api/racks');
         if (res.ok) {
           const data = await res.json();
-          // แปลงโครงสร้างข้อมูลจาก DB ให้แมตช์กับรูปแบบ rackStorage state
-          // สมมติโครงสร้างจาก /api/racks ส่งมาเป็นอาเรย์หรือออบเจ็กต์รหัส Rack
           const formattedRacks = {};
           if (Array.isArray(data)) {
             data.forEach(r => {
@@ -102,13 +99,12 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
     fetchRacks();
   }, []);
 
-  // คำนวณจำนวนชิ้นสินค้ารวมใน Slot
   const getSlotTotalQty = (slotData) => {
     if (!slotData || !slotData.items) return 0;
     return slotData.items.reduce((sum, item) => sum + item.qty, 0);
   };
 
-  // ค้นหาว่าสินค้าชิ้นนี้มีจัดเก็บอยู่ที่ตำแหน่งไหนบ้างในคลัง
+  // ค้นหาตำแหน่งเดิมที่มีสินค้านี้อยู่
   const getExistingLocationsForItem = (itemName) => {
     const locations = [];
     Object.entries(rackStorage).forEach(([rackId, slots]) => {
@@ -123,7 +119,8 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
                 slotName,
                 qty: foundItem.qty,
                 totalSlotQty: totalQty,
-                availableSpace: MAX_PALLET_CAPACITY - totalQty
+                availableSpace: MAX_PALLET_CAPACITY - totalQty,
+                type: 'EXISTING'
               });
             }
           }
@@ -133,7 +130,33 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
     return locations;
   };
 
-  // คำนวณสถิติความจุของ Rack
+  // ค้นหา Slot ที่ว่างตู้แรกสำหรับสินค้าใหม่ (Smart Recommendation)
+  const getFirstAvailableSlots = (limit = 3) => {
+    const availableLocs = [];
+    for (const rack of racks) {
+      const rackId = rack.id;
+      const slots = rackStorage[rackId] || {};
+      for (const slotName of rackSlots) {
+        const slotData = slots[slotName] || { items: [] };
+        const totalQty = getSlotTotalQty(slotData);
+        const itemsList = slotData.items || [];
+        
+        if (totalQty < MAX_PALLET_CAPACITY && itemsList.length < MAX_ITEMS_PER_SLOT) {
+          availableLocs.push({
+            rackId,
+            slotName,
+            totalSlotQty: totalQty,
+            availableSpace: MAX_PALLET_CAPACITY - totalQty,
+            type: 'RECOMMENDED'
+          });
+          if (availableLocs.length >= limit) break;
+        }
+      }
+      if (availableLocs.length >= limit) break;
+    }
+    return availableLocs;
+  };
+
   const getRackMetrics = (rackId) => {
     const rackData = rackStorage[rackId] || {};
     let totalStoredQty = 0;
@@ -171,13 +194,26 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
 
   const handleSelectItem = (item) => {
     setSelectedItemToStore(item);
-    setSmartTargetLocation(null);
     setSmartInputQty(Math.min(item.qty, MAX_PALLET_CAPACITY));
+
+    // เช็กตำแหน่งเดิม หรือแนะนำตำแหน่งแรกที่ว่างให้อัตโนมัติ
+    const existing = getExistingLocationsForItem(item.name);
+    if (existing.length > 0) {
+      setSmartTargetLocation(existing[0]);
+    } else {
+      const recommended = getFirstAvailableSlots(1);
+      setSmartTargetLocation(recommended.length > 0 ? recommended[0] : null);
+    }
+
     setIsSmartModalOpen(true);
   };
 
-  // ฟังก์ชันบันทึกการจัดเก็บลงฐานข้อมูลผ่าน API
   const executeStore = async (rackId, slotName, qtyToStore) => {
+    if (!rackId || !slotName) {
+      alert('⚠️ กรุณาระบุ Rack และ Slot ให้ถูกต้อง');
+      return false;
+    }
+
     console.log('--- กำลังกดจัดเก็บ ---', { rackId, slotName, qtyToStore });
 
     const numQty = parseInt(qtyToStore);
@@ -225,32 +261,34 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
       [rackId]: currentSlots
     };
 
-    // อัปเดตข้อมูล Rack ลง MongoDB ผ่าน API
     try {
+      // 1. อัปเดตข้อมูล Rack ลง MongoDB
       await fetch(`https://mainwms-backend.onrender.com/api/racks/${rackId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ slots: currentSlots })
       });
 
-      // อัปเดต targetLocation ลงในรายการสินค้า
-      const formattedLocation = `${rackId} (${slotName})`; // จะได้ "ZONE-A1 (Slot 4)"
+      // 2. อัปเดต targetLocation ลงในใบเสร็จ
+      const formattedLocation = `${rackId} (${slotName})`; // รูปแบบ: "ZONE-A1 (Slot 4)"
       const updatedItemsForReceipt = selectedReceipt.items.map(it => {
-        if (it.id === selectedItemToStore.id || it.productName === selectedItemToStore.name || it.name === selectedItemToStore.name) {
-          return { ...it, targetLocation: formattedLocation };
+        const itemName = it.productName || it.name;
+        if (it.id === selectedItemToStore.id || itemName === selectedItemToStore.name) {
+          return {
+            ...it,
+            name: itemName,
+            quantity: it.quantity || it.qty,
+            targetLocation: formattedLocation
+          };
         }
         return it;
       });
-
-      // เช็กดูใน Console (F12) ว่ามี targetLocation โผล่มาในก้อนนี้ไหม
-      console.log("Payload ที่กำลังจะส่งไปอัปเดตใบเสร็จ:", updatedItemsForReceipt);
 
       await fetch(`https://mainwms-backend.onrender.com/api/receipts/${selectedReceipt._id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ items: updatedItemsForReceipt })
       });
-      // ------------------------------------------------------------------------------------------
 
     } catch (err) {
       console.error('Error updating rack or receipt in database:', err);
@@ -289,7 +327,6 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
       alert('กรุณาเลือกตำแหน่งที่ต้องการจัดวางก่อนครับ');
       return;
     }
-    // ใช้ executeStore ตัวเดียวกับระบบ Manual เพื่อให้มันยิงอัปเดตทั้งตู้ Rack และใบเสร็จพร้อมกันครับ
     const success = await executeStore(smartTargetLocation.rackId, smartTargetLocation.slotName, smartInputQty);
     if (success) {
       setIsSmartModalOpen(false);
@@ -339,7 +376,7 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
     }
   };
 
-  const handleApproveAll = async () => { // <--- เติม async ตรงนี้
+  const handleApproveAll = async () => {
     try {
       const res = await fetch(`https://mainwms-backend.onrender.com/api/receipts/${selectedReceipt._id}/status`, {
         method: 'PATCH',
@@ -351,7 +388,6 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
         alert(`อนุมัติและบันทึกการจัดเก็บใบเสร็จ ${selectedReceipt.docNo || selectedReceipt.receiptId} เรียบร้อยแล้ว!`);
         setViewMode('list');
         setSelectedReceipt(null);
-        // รีเฟรชรายการใบเสร็จ
         const updatedRes = await fetch('https://mainwms-backend.onrender.com/api/receipts');
         if (updatedRes.ok) {
           const data = await updatedRes.json();
@@ -395,7 +431,7 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
               </span>
             </div>
             {onLogout && (
-              <button onClick={onLogout} className="text-xs text-rose-400 hover:text-rose-300 font-medium transition-colors">
+              <button onClick={onLogout} className="text-xs text-rose-400 hover:text-rose-300 font-medium transition-colors cursor-pointer">
                 Logout
               </button>
             )}
@@ -444,7 +480,7 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
                         </div>
                         <p className="text-[11px] text-slate-400 mt-0.5">Quantity : {rec.quantity || rec.items?.length || 0} items | Status: <b className="text-amber-600">{rec.status}</b></p>
                       </div>
-                      <button onClick={() => handleOpenOrganize(rec)} className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-6 py-2.5 rounded-xl transition shadow">
+                      <button onClick={() => handleOpenOrganize(rec)} className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-6 py-2.5 rounded-xl transition shadow cursor-pointer">
                         Organize
                       </button>
                     </div>
@@ -465,7 +501,7 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
                       <span className="w-3 h-3 bg-indigo-600 rounded-full inline-block"></span>
                       <h3 className="font-bold text-slate-800 text-sm">3D WAREHOUSE MODEL (Live DB)</h3>
                     </div>
-                    <button onClick={() => setViewMode('list')} className="bg-slate-900 text-white text-xs px-4 py-2 rounded-xl font-bold hover:bg-slate-800 transition flex items-center gap-1.5">
+                    <button onClick={() => setViewMode('list')} className="bg-slate-900 text-white text-xs px-4 py-2 rounded-xl font-bold hover:bg-slate-800 transition flex items-center gap-1.5 cursor-pointer">
                       <ArrowLeft size={14} /> Back to List
                     </button>
                   </div>
@@ -473,7 +509,7 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
                   {selectedItemToStore && !isSmartModalOpen && (
                     <div className="bg-amber-50 border border-amber-300 rounded-xl p-3 mb-4 flex items-center justify-between text-xs text-amber-800 font-semibold animate-pulse">
                       <span>📌 โหมดจัดวางด้วยตนเอง (Manual): เลือกคลิกที่ Rack เพื่อดู 9 Slots ของสินค้า <b>{selectedItemToStore.name}</b></span>
-                      <button onClick={() => setIsSmartModalOpen(true)} className="text-indigo-600 underline text-[11px]">เปิด Popup แนะนำอีกครั้ง</button>
+                      <button onClick={() => setIsSmartModalOpen(true)} className="text-indigo-600 underline text-[11px] cursor-pointer">เปิด Popup แนะนำอีกครั้ง</button>
                     </div>
                   )}
 
@@ -637,7 +673,7 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
         </div>
       </div>
 
-      {/* 3. POPUP MODAL 1: SMART LOCATION RECOMMENDATION */}
+      {/* 3. POPUP MODAL 1: SMART LOCATION RECOMMENDATION (ปรับปรุงการดึงจุดแนะนำ + แนะนำจุดว่าง) */}
       {isSmartModalOpen && selectedItemToStore && (
         <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-6 w-[560px] shadow-2xl border border-slate-200 animate-fade-in flex flex-col">
@@ -647,62 +683,73 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
                   <Sparkles size={20} />
                 </div>
                 <div>
-                  <h3 className="font-black text-slate-800 text-base">ตำแหน่งจัดเก็บสินค้า</h3>
+                  <h3 className="font-black text-slate-800 text-base">ตำแหน่งจัดเก็บสินค้าแนะนำ</h3>
                   <p className="text-xs text-indigo-600 font-bold">{selectedItemToStore.name} (คงเหลือ {selectedItemToStore.qty} ชิ้น)</p>
                 </div>
               </div>
-              <button onClick={() => setIsSmartModalOpen(false)} className="text-slate-400 hover:text-slate-600 font-bold px-2 py-1">✕</button>
+              <button onClick={() => setIsSmartModalOpen(false)} className="text-slate-400 hover:text-slate-600 font-bold px-2 py-1 cursor-pointer">✕</button>
             </div>
 
             <div className="my-2">
-              <p className="text-xs font-bold text-slate-700 mb-2.5 flex items-center gap-1.5">
-                <MapPin size={14} className="text-indigo-600" /> ตำแหน่งปัจจุบันของสินค้านี้ในคลัง:
-              </p>
-
               {(() => {
                 const existingLocs = getExistingLocationsForItem(selectedItemToStore.name);
-                if (existingLocs.length === 0) {
-                  return (
-                    <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-center text-xs text-slate-500 my-2">
-                      ยังไม่มีสินค้านี้จัดวางอยู่ใน Rack/Slot ใดๆ ในคลัง
-                    </div>
-                  );
-                }
+                const recommendedLocs = getFirstAvailableSlots(3);
+                const displayLocs = existingLocs.length > 0 ? existingLocs : recommendedLocs;
 
                 return (
-                  <div className="space-y-2 max-h-[180px] overflow-y-auto pr-1">
-                    {existingLocs.map((loc, idx) => {
-                      const isSelectedLoc = smartTargetLocation?.rackId === loc.rackId && smartTargetLocation?.slotName === loc.slotName;
-                      const isFull = loc.availableSpace <= 0;
+                  <div>
+                    <p className="text-xs font-bold text-slate-700 mb-2.5 flex items-center gap-1.5">
+                      <MapPin size={14} className="text-indigo-600" /> 
+                      {existingLocs.length > 0 ? 'ตำแหน่งปัจจุบันของสินค้านี้ในคลัง:' : '✨ ตำแหน่งที่ว่างและแนะนำสำหรับสินค้าใหม่:'}
+                    </p>
 
-                      return (
-                        <div
-                          key={idx}
-                          onClick={() => {
-                            if (!isFull) {
-                              setSmartTargetLocation(loc);
-                              setSmartInputQty(Math.min(selectedItemToStore.qty, loc.availableSpace));
-                            }
-                          }}
-                          className={`p-3.5 border-2 rounded-2xl flex items-center justify-between transition ${isFull
-                            ? 'bg-slate-100 border-slate-200 opacity-60 cursor-not-allowed'
-                            : isSelectedLoc
-                              ? 'bg-indigo-50 border-indigo-600 ring-2 ring-indigo-300 cursor-pointer'
-                              : 'bg-white border-slate-200 hover:border-indigo-400 cursor-pointer shadow-sm'
-                            }`}
-                        >
-                          <div>
-                            <p className="font-bold text-xs text-slate-800">{loc.rackId} — <span className="text-indigo-600">{loc.slotName}</span></p>
-                            <p className="text-[11px] text-slate-500 mt-0.5">
-                              มีสินค้านี้อยู่แล้ว: <b>{loc.qty}</b> ชิ้น {isFull ? '(เต็มแล้ว)' : `(ว่างอีก ${loc.availableSpace} ชิ้น)`}
-                            </p>
-                          </div>
-                          <span className={`text-[10px] font-bold px-3 py-1 rounded-xl ${isSelectedLoc ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
-                            {isSelectedLoc ? 'เลือกอยู่' : 'คลิกเลือก'}
-                          </span>
-                        </div>
-                      );
-                    })}
+                    {displayLocs.length === 0 ? (
+                      <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-center text-xs text-slate-500 my-2">
+                        ไม่พบ Slot ที่ว่างในระบบ
+                      </div>
+                    ) : (
+                      <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
+                        {displayLocs.map((loc, idx) => {
+                          const isSelectedLoc = smartTargetLocation?.rackId === loc.rackId && smartTargetLocation?.slotName === loc.slotName;
+                          const isFull = loc.availableSpace <= 0;
+
+                          return (
+                            <div
+                              key={idx}
+                              onClick={() => {
+                                if (!isFull) {
+                                  setSmartTargetLocation(loc);
+                                  setSmartInputQty(Math.min(selectedItemToStore.qty, loc.availableSpace));
+                                }
+                              }}
+                              className={`p-3.5 border-2 rounded-2xl flex items-center justify-between transition ${isFull
+                                ? 'bg-slate-100 border-slate-200 opacity-60 cursor-not-allowed'
+                                : isSelectedLoc
+                                  ? 'bg-indigo-50 border-indigo-600 ring-2 ring-indigo-300 cursor-pointer'
+                                  : 'bg-white border-slate-200 hover:border-indigo-400 cursor-pointer shadow-sm'
+                                }`}
+                            >
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <p className="font-bold text-xs text-slate-800">{loc.rackId} — <span className="text-indigo-600">{loc.slotName}</span></p>
+                                  {loc.type === 'RECOMMENDED' && (
+                                    <span className="text-[9px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-bold">ว่างสำหรับสินค้าใหม่</span>
+                                  )}
+                                </div>
+                                <p className="text-[11px] text-slate-500 mt-0.5">
+                                  {loc.type === 'EXISTING' 
+                                    ? `มีสินค้านี้อยู่แล้ว: ${loc.qty} ชิ้น (ว่างอีก ${loc.availableSpace} ชิ้น)` 
+                                    : `ความจุคงเหลือ: ${loc.availableSpace} ชิ้น`}
+                                </p>
+                              </div>
+                              <span className={`text-[10px] font-bold px-3 py-1 rounded-xl ${isSelectedLoc ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                                {isSelectedLoc ? 'เลือกอยู่' : 'คลิกเลือก'}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 );
               })()}
@@ -723,7 +770,7 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
             )}
 
             <div className="mt-5 pt-3 border-t border-slate-100 flex items-center justify-between gap-3">
-              <button onClick={handleSwitchToManual} className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-4 py-2.5 rounded-xl text-xs transition flex items-center gap-1.5">
+              <button onClick={handleSwitchToManual} className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-4 py-2.5 rounded-xl text-xs transition flex items-center gap-1.5 cursor-pointer">
                 <Wrench size={14} /> จัดด้วยตนเอง (Manual)
               </button>
               <button
@@ -747,7 +794,7 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
                 <h3 className="font-black text-slate-800 text-base">ตรวจสอบ 9 Slot ของ Rack: <span className="text-indigo-600">{targetRackId}</span></h3>
                 <p className="text-xs text-slate-500 mt-0.5">กำลังวาง: <b className="text-slate-800">{selectedItemToStore?.name}</b></p>
               </div>
-              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 font-bold px-2 py-1">✕</button>
+              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 font-bold px-2 py-1 cursor-pointer">✕</button>
             </div>
 
             <div className="grid grid-cols-3 gap-3 my-2 overflow-y-auto pr-1">
@@ -816,7 +863,7 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
                     onChange={(e) => setInputQty(e.target.value)}
                     className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-indigo-500"
                   />
-                  <button onClick={confirmStoreToSlot} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-6 py-2 rounded-xl text-xs transition shadow">
+                  <button onClick={confirmStoreToSlot} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-6 py-2 rounded-xl text-xs transition shadow cursor-pointer">
                     ยืนยัน
                   </button>
                 </div>
