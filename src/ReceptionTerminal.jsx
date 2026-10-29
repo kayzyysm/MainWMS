@@ -217,8 +217,9 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
         </div>
       )}
 
-      {/* ================= 1. LEFT SIDEBAR ================= */}
-      <div className="w-full lg:w-[320px] lg:xl:w-[380px] lg:h-[calc(100vh-3rem)] lg:sticky lg:top-6 bg-[#0b0f19] text-white flex flex-col justify-between p-6 sm:p-8 shrink-0 overflow-hidden rounded-2xl sm:rounded-3xl border border-slate-800 shadow-xl">
+      {/* ================= 1. LEFT SIDEBAR (แก้ไขปัญหาภาพซ้อนด้วย relative และ z-10) ================= */}
+      <div className="w-full lg:w-[320px] lg:xl:w-[380px] lg:h-[calc(100vh-3rem)] lg:sticky lg:top-6 bg-[#0b0f19] text-white flex flex-col justify-between p-6 sm:p-8 shrink-0 overflow-hidden rounded-2xl sm:rounded-3xl border border-slate-800 shadow-xl relative">
+        {/* Background Image & Overlay */}
         <div className="absolute inset-0 z-0 opacity-40 mix-blend-luminosity pointer-events-none">
           <img
             src="https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?q=80&w=1000&auto=format&fit=crop"
@@ -228,6 +229,7 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
           <div className="absolute inset-0 bg-gradient-to-t from-[#0b0f19] via-[#0b0f19]/60 to-transparent" />
         </div>
 
+        {/* Top Branding Content (z-10 อยู่บนสุด ป้องกันภาพทับ) */}
         <div className="relative z-10 flex flex-row lg:flex-col justify-between items-center lg:items-start">
           <div>
             <h1 className="text-3xl lg:text-5xl font-black tracking-widest text-white leading-none">
@@ -250,6 +252,7 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
           </div>
         </div>
 
+        {/* Bottom User Info Content (z-10) */}
         <div className="relative z-10 hidden lg:flex">
           <div className="w-full bg-[#1a233a]/80 backdrop-blur-md border border-slate-700/60 rounded-full px-5 py-2.5 flex items-center justify-between shadow-lg">
             <div className="flex items-center gap-2">
