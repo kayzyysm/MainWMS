@@ -8,14 +8,17 @@ export default function StaffTerminal({ currentUser, onLogout }) {
   const [selectedReceipt, setSelectedReceipt] = useState(null);
   const [selectedItem, setSelectedItem] = useState(null);
   
-  // State สำหรับควบคุมระบบกล้องสแกนจริง
+  // State ควบคุมกล้อง
   const [scanStep, setScanStep] = useState(null); // 'slot' หรือ 'item'
   const [scannedSlotTarget, setScannedSlotTarget] = useState(null);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const html5QrCodeRef = useRef(null);
   const [scanSuccess, setScanSuccess] = useState(false);
+  
+  // State สำหรับโชว์ข้อความเตือนชั่วคราวเวลาสแกนโดนตัวที่ผิด (ไม่ต้องเด้ง Alert ปิดกล้อง)
+  const [scanErrorMsg, setScanErrorMsg] = useState(null);
 
-  // ดึงข้อมูลใบเสร็จจาก Backend (เฉพาะ Ready to Pick)
+  // ดึงข้อมูลใบเสร็จจาก Backend
   const fetchReceipts = async () => {
     try {
       setLoading(true);
@@ -58,12 +61,15 @@ export default function StaffTerminal({ currentUser, onLogout }) {
     setSelectedItem(receipt.items.length > 0 ? receipt.items[0] : null);
     setScannedSlotTarget(null);
     setScanSuccess(false);
+    setScanErrorMsg(null);
   };
 
-  // เปิดใช้งานกล้องมือถือจริง
+  // เปิดกล้องค้างไว้ (ไม่ปิดอัตโนมัติจนกว่าจะเจออันที่ถูก)
   const startCameraScan = (stepType) => {
     setScanStep(stepType);
     setIsScannerOpen(true);
+    setScanErrorMsg(null);
+
     setTimeout(() => {
       const scannerId = "staff-qr-reader-container";
       if (document.getElementById(scannerId)) {
@@ -74,15 +80,15 @@ export default function StaffTerminal({ currentUser, onLogout }) {
         const html5QrCode = html5QrCodeRef.current;
         html5QrCode.start(
           { facingMode: "environment" },
-          { fps: 10, qrbox: { width: 220, height: 220 } },
+          { fps: 15, qrbox: { width: 250, height: 250 } },
           (decodedText) => {
-            handleScanResult(decodedText, stepType);
-            stopCameraScan();
+            // เมื่อกล้องกวาดเจอ QR Code ให้ส่งไปเช็กความถูกต้องแบบ Real-time
+            handleScanResultContinuous(decodedText, stepType, html5QrCode);
           },
           (errorMessage) => {}
         ).catch(err => {
           console.error("Unable to start scanning.", err);
-          alert("ไม่สามารถเปิดกล้องได้ กรุณาตรวจสอบสิทธิ์กล้องของเบราว์เซอร์ (HTTPS Required)");
+          alert("ไม่สามารถเปิดกล้องได้ กรุณาตรวจสอบสิทธิ์กล้องของเบราว์เซอร์");
           setIsScannerOpen(false);
         });
       }
@@ -102,16 +108,15 @@ export default function StaffTerminal({ currentUser, onLogout }) {
     }
   };
 
-  // ตรวจสอบข้อความ QR Code ที่สแกนได้จากกล้องจริง (รองรับทั้งรูปแบบ PDF และข้อความระบบ)
-  const handleScanResult = (decodedText, stepType) => {
+  // ฟังก์ชันเช็กผลแบบต่อเนื่อง (ถ้าผิด จะไม่ปิดกล้อง แต่จะโชว์เตือนแล้วให้สแกนหาต่อจนกว่าจะเจอตัวที่ถูก)
+  const handleScanResultContinuous = (decodedText, stepType, scannerInstance) => {
     const text = decodedText.trim();
     
     if (stepType === 'slot') {
-      const cleanScanned = text.toUpperCase().replace(/[\s\(\)]/g, ''); // ตัดช่องว่างและวงเล็บออก เช่น "ZONE-A1(SLOT1)"
+      const cleanScanned = text.toUpperCase().replace(/[\s\(\)]/g, '');
       const targetLoc = (selectedItem?.targetLocation || '').toUpperCase();
       const cleanTarget = targetLoc.replace(/[\s\(\)]/g, '');
 
-      // ดึงโซนและเลข Slot ออกมาเทียบกันโดยตรง เพื่อความแม่นยำสูงสุด
       const scannedMatch = text.match(/(ZONE-[A-Z0-9]+).*?(\d+)/i);
       const targetMatch = targetLoc.match(/(ZONE-[A-Z0-9]+).*?(\d+)/i);
 
@@ -119,26 +124,33 @@ export default function StaffTerminal({ currentUser, onLogout }) {
       if (cleanScanned.includes(cleanTarget) || cleanTarget.includes(cleanScanned)) {
         isMatch = true;
       } else if (scannedMatch && targetMatch) {
-        const scannedZone = scannedMatch[1];
-        const scannedSlotNum = parseInt(scannedMatch[2], 10);
-        
-        const targetZone = targetMatch[1];
-        const targetSlotNum = parseInt(targetMatch[2], 10);
-
-        if (scannedZone === targetZone && scannedSlotNum === targetSlotNum) {
+        if (scannedMatch[1] === targetMatch[1] && parseInt(scannedMatch[2], 10) === parseInt(targetMatch[2], 10)) {
           isMatch = true;
         }
       }
 
       if (isMatch) {
-        setScannedSlotTarget(selectedItem.targetLocation);
-        alert(`✅ ยืนยันตำแหน่งถูกต้อง! คุณอยู่ที่ ${selectedItem.targetLocation}`);
+        // เจอตั๋วที่ถูกต้องแล้ว! ปิดกล้องแล้วทำการบันทึก
+        scannerInstance.stop().then(() => {
+          scannerInstance.clear();
+          setIsScannerOpen(false);
+          setScannedSlotTarget(selectedItem.targetLocation);
+          setScanErrorMsg(null);
+          alert(`✅ ยืนยันตำแหน่งถูกต้อง! คุณอยู่ที่ ${selectedItem.targetLocation}`);
+        }).catch(() => setIsScannerOpen(false));
       } else {
-        alert(`❌ ยืนยันตำแหน่งไม่ถูกต้อง!\n\nคุณสแกนได้: "${text}"\nตำแหน่งที่ต้องการคือ: "${selectedItem.targetLocation}"`);
+        // ยังไม่ใช่ตัวที่ถูกต้อง แสดงเตือนเบาๆ หน้าจอ แต่กล้องยังเปิดสแกนต่อ ไม่หลุดออก
+        setScanErrorMsg(`❌ สแกนโดน "${text}" (เป้าหมายคือ ${selectedItem.targetLocation}) - กำลังหากล้องต่อ...`);
       }
 
     } else if (stepType === 'item') {
-      executePutawayStorage();
+      // ถ้าเป็นสเต็ปสแกนสินค้า เจอปุ๊บปิดกล้องแล้วบันทึกทันที
+      scannerInstance.stop().then(() => {
+        scannerInstance.clear();
+        setIsScannerOpen(false);
+        setScanErrorMsg(null);
+        executePutawayStorage();
+      }).catch(() => setIsScannerOpen(false));
     }
   };
 
@@ -224,13 +236,13 @@ export default function StaffTerminal({ currentUser, onLogout }) {
   return (
     <div className="p-3 sm:p-6 bg-slate-900 min-h-screen font-sans flex flex-col lg:flex-row gap-4 sm:gap-6 relative">
 
-      {/* ================= MODAL กล้องสแกนจริง ================= */}
+      {/* ================= MODAL กล้องสแกนจริง (วิ่งหาต่อเนื่อง) ================= */}
       {isScannerOpen && (
         <div className="fixed inset-0 bg-black/90 z-50 flex flex-col items-center justify-center p-4">
           <div className="w-full max-w-sm bg-slate-800 rounded-3xl p-4 shadow-2xl border border-slate-700 flex flex-col items-center">
-            <div className="w-full flex justify-between items-center mb-3">
+            <div className="w-full flex justify-between items-center mb-2">
               <h3 className="text-white font-bold text-sm tracking-wide">
-                {scanStep === 'slot' ? 'สแกน QR Code ประจำ Slot ที่ชั้น' : 'สแกน QR Code สินค้า'}
+                {scanStep === 'slot' ? 'กำลังสหาตำแหน่ง Slot...' : 'กำลังสแกนสินค้า...'}
               </h3>
               <button 
                 onClick={stopCameraScan} 
@@ -240,18 +252,25 @@ export default function StaffTerminal({ currentUser, onLogout }) {
               </button>
             </div>
             
+            {/* กล่องแสดงข้อความเตือนชั่วคราวเวลากวาดไปโดนอันที่ผิด (กล้องไม่ปิด) */}
+            {scanErrorMsg && (
+              <div className="w-full bg-rose-500/20 border border-rose-500/50 text-rose-300 text-[11px] font-semibold px-3 py-1.5 rounded-xl mb-2 text-center animate-pulse">
+                {scanErrorMsg}
+              </div>
+            )}
+            
             <div id="staff-qr-reader-container" className="w-full overflow-hidden rounded-2xl bg-black"></div>
             
             <p className="text-slate-400 text-xs text-center mt-3 leading-relaxed">
               {scanStep === 'slot' 
-                ? 'ส่องกล้องไปที่ QR Code หน้าตู้ชั้นวางเพื่อยืนยันจุดจัดวาง' 
-                : 'ส่องกล้องไปที่ QR Code บนสติกเกอร์กล่องสินค้าเพื่อหักยอดเข้าคลัง'}
+                ? `💡 กวาดกล้องหาป้าย "${selectedItem?.targetLocation}" (กล้องจะไม่ปิดจนกว่าจะเจออันที่ถูกต้อง)` 
+                : '💡 ส่องกล้องไปที่ QR Code กล่องสินค้า'}
             </p>
           </div>
         </div>
       )}
 
-      {/* ================= 1. LEFT SIDEBAR (Responsive) ================= */}
+      {/* ================= 1. LEFT SIDEBAR ================= */}
       <div className="w-full lg:w-[320px] lg:xl:w-[380px] lg:h-[calc(100vh-3rem)] lg:sticky lg:top-6 bg-[#0b0f19] text-white flex flex-col justify-between p-6 sm:p-8 shrink-0 overflow-hidden rounded-2xl sm:rounded-3xl border border-slate-800 shadow-xl relative">
         <div className="absolute inset-0 z-0 opacity-40 mix-blend-luminosity pointer-events-none">
           <img
@@ -297,7 +316,7 @@ export default function StaffTerminal({ currentUser, onLogout }) {
         </div>
       </div>
 
-      {/* ================= 2. RIGHT MAIN CONTENT AREA (Responsive) ================= */}
+      {/* ================= 2. RIGHT MAIN CONTENT AREA ================= */}
       <div className="flex-1 mx-auto w-full bg-slate-100 rounded-2xl sm:rounded-3xl border-2 sm:border-4 border-slate-700 shadow-2xl overflow-hidden p-4 sm:p-6 flex flex-col justify-between">
 
         <div>
