@@ -14,10 +14,10 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
   // State สำหรับเช็คลิสต์รายการสินค้าของใบเสร็จที่เลือก
   const [currentReceiptItems, setCurrentReceiptItems] = useState([]);
 
-  // State และ Ref สำหรับระบบเปิดกล้องสแกนจริง
+  // State และ Ref สำหรับระบบเปิดกล้องสแกนจริงแบบต่อเนื่อง
   const [isScannerOpen, setIsScannerOpen] = useState(false);
-  const scannerRef = useRef(null);
   const html5QrCodeRef = useRef(null);
+  const [scanErrorMsg, setScanErrorMsg] = useState(null);
 
   // 1. ดึงรายการใบเสร็จทั้งหมดจาก MongoDB ผ่าน API (กรองเฉพาะ Pending สำหรับหน้า Reception)
   const fetchReceipts = async () => {
@@ -40,9 +40,11 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
     fetchReceipts();
   }, []);
 
-  // ฟังก์ชันเริ่มเปิดกล้องสแกนจริง
+  // ฟังก์ชันเริ่มเปิดกล้องสแกนจริงแบบต่อเนื่อง (ไม่ปิดเองจนกว่าจะเจอตัวที่ถูกต้อง)
   const startCameraScan = () => {
     setIsScannerOpen(true);
+    setScanErrorMsg(null);
+
     setTimeout(() => {
       const scannerId = "qr-reader-container";
       if (document.getElementById(scannerId)) {
@@ -52,16 +54,13 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
         
         const html5QrCode = html5QrCodeRef.current;
         html5QrCode.start(
-          { facingMode: "environment" }, // ใช้กล้องหลังมือถือ
-          { fps: 10, qrbox: { width: 240, height: 240 } },
+          { facingMode: "environment" },
+          { fps: 15, qrbox: { width: 250, height: 250 } },
           (decodedText) => {
-            // เมื่อสแกน QR โค้ดสำเร็จจากสติกเกอร์
-            handleSuccessfulScan(decodedText);
-            stopCameraScan();
+            // ส่ง QR ที่สแกนได้ไปเช็กแบบ Real-time (กล้องจะไม่ปิดจนกว่าจะเจออันที่ถูก)
+            handleScanResultContinuous(decodedText, html5QrCode);
           },
-          (errorMessage) => {
-            // กำลังกวาดหา QR Code (ปล่อยว่างไว้ได้)
-          }
+          (errorMessage) => {}
         ).catch(err => {
           console.error("Unable to start scanning.", err);
           alert("ไม่สามารถเปิดใช้งานกล้องได้ กรุณาตรวจสอบสิทธิ์การเข้าถึงกล้อง (HTTPS Required)");
@@ -77,57 +76,89 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
       html5QrCodeRef.current.stop().then(() => {
         html5QrCodeRef.current.clear();
         setIsScannerOpen(false);
+        setScanErrorMsg(null);
       }).catch(err => {
-        console.error("Failed to clear html5QrCode instance.", err);
         setIsScannerOpen(false);
+        setScanErrorMsg(null);
       });
     } else {
       setIsScannerOpen(false);
+      setScanErrorMsg(null);
     }
   };
 
-  // จัดการเมื่อสแกน QR Code สำเร็จ (เช็กเลขใบเสร็จ + ตัดยอด SKU)
-  const handleSuccessfulScan = (scannedText) => {
-    console.log("Scanned QR Text:", scannedText);
+  // ฟังก์ชันเช็กผลสแกนแบบต่อเนื่อง (ถ้ายังไม่เจออันที่ถูกต้อง กล้องจะไม่ปิด แต่จะขึ้นเตือนและสแกนหาต่อ)
+  const handleScanResultContinuous = (scannedText, scannerInstance) => {
     const text = scannedText.trim();
+    console.log("Scanned QR Text:", text);
 
-    // รูปแบบสติกเกอร์ของคุณคือ: WH-INV-xxxxxx-SKU (เช่น WH-INV-763959-PRD-001)
+    // กรณีอยู่หน้า List (ยังไม่เลือกใบเสร็จ): สแกนเพื่อค้นหาและเปิดใบเสร็จนั้น
+    if (!selectedReceipt) {
+      const foundReceipt = receipts.find(rec => 
+        (rec.docNo && text.toLowerCase().includes(rec.docNo.toLowerCase())) ||
+        (rec.receiptId && text.toLowerCase().includes(rec.receiptId.toLowerCase())) ||
+        text.toLowerCase().includes((rec.docNo || '').toLowerCase())
+      );
+
+      if (foundReceipt) {
+        scannerInstance.stop().then(() => {
+          scannerInstance.clear();
+          setIsScannerOpen(false);
+          handleSelectReceipt(foundReceipt);
+          alert(`✅ เปิดใบเสร็จ ${foundReceipt.docNo || foundReceipt.receiptId} สำเร็จ!`);
+        }).catch(() => setIsScannerOpen(false));
+      } else {
+        setScanErrorMsg(`❌ ไม่พบใบเสร็จที่ตรงกับ "${text}" — กำลังหากล้องต่อ...`);
+      }
+      return;
+    }
+
+    // กรณีอยู่ในหน้า Detail แล้ว: สแกนเพื่อตัดยอดสินค้า SKU
     const parts = text.split('-');
-    
     if (parts.length >= 4) {
       const scannedDocNo = `${parts[0]}-${parts[1]}-${parts[2]}`;
       const scannedSku = `${parts[3]}-${parts[4]}`;
-
-      // 1. เช็กความถูกต้อง: เลขใบเสร็จใน QR ต้องตรงกับใบเสร็จที่กำลังเปิดตรวจรับอยู่ตอนนี้
       const activeDocNo = selectedReceipt?.docNo || selectedReceipt?.receiptId;
-      if (activeDocNo && scannedDocNo !== activeDocNo) {
-        alert(`❌ ผิดพลาด! สติกเกอร์นี้เป็นของใบเสร็จ "${scannedDocNo}" แต่คุณกำลังตรวจรับใบเสร็จ "${activeDocNo}" อยู่`);
+
+      if (activeDocNo && !scannedDocNo.toLowerCase().includes(activeDocNo.toLowerCase()) && !activeDocNo.toLowerCase().includes(scannedDocNo.toLowerCase())) {
+        setScanErrorMsg(`❌ ผิดใบเสร็จ! (${scannedDocNo}) — กำลังหาของ ${activeDocNo}...`);
         return;
       }
 
-      // 2. ค้นหาสินค้าในเช็คลิสต์ของใบเสร็จนี้
       const matchedIndex = currentReceiptItems.findIndex(item => 
         item.id?.toLowerCase() === scannedSku.toLowerCase()
       );
 
       if (matchedIndex > -1) {
-        setCurrentReceiptItems(prev => {
-          const updated = [...prev];
-          if (updated[matchedIndex].qty > 0) {
-            updated[matchedIndex] = {
-              ...updated[matchedIndex],
-              qty: updated[matchedIndex].qty - 1
-            };
-          }
-          return updated;
-        });
-        alert(`✅ สแกนสำเร็จ: ${currentReceiptItems[matchedIndex].name} (${scannedSku}) ตัดยอดเหลือ ${Math.max(0, currentReceiptItems[matchedIndex].qty - 1)} ชิ้น`);
-      } else {
-        alert(`⚠️ ไม่พบสินค้า SKU "${scannedSku}" ในใบเสร็จนี้`);
-      }
+        if (currentReceiptItems[matchedIndex].qty <= 0) {
+          setScanErrorMsg(`⚠️ สินค้า ${scannedSku} ครบจำนวนแล้ว`);
+          return;
+        }
 
+        // เจอสินค้าที่ถูกต้องและยังตัดไม่ครบ ปิดกล้องแล้วทำการตัดยอด
+        scannerInstance.stop().then(() => {
+          scannerInstance.clear();
+          setIsScannerOpen(false);
+          setScanErrorMsg(null);
+
+          setCurrentReceiptItems(prev => {
+            const updated = [...prev];
+            if (updated[matchedIndex].qty > 0) {
+              updated[matchedIndex] = {
+                ...updated[matchedIndex],
+                qty: updated[matchedIndex].qty - 1
+              };
+            }
+            return updated;
+          });
+          alert(`✅ สแกนสำเร็จ: ${currentReceiptItems[matchedIndex].name} (${scannedSku}) ตัดยอดเหลือ ${Math.max(0, currentReceiptItems[matchedIndex].qty - 1)} ชิ้น`);
+        }).catch(() => setIsScannerOpen(false));
+
+      } else {
+        setScanErrorMsg(`⚠️ ไม่พบ SKU "${scannedSku}" ในใบเสร็จนี้ — กำลังหาต่อ...`);
+      }
     } else {
-      alert(`⚠️ รูปแบบ QR Code ไม่ถูกต้อง: "${text}"`);
+      setScanErrorMsg(`⚠️ รูปแบบ QR ไม่ถูกต้อง: "${text}"`);
     }
   };
 
@@ -154,10 +185,10 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
     setViewMode('detail');
   };
 
+  // ปุ่ม SCAN ด้านนอก (เปิดกล้องจริงเพื่อสแกนหาใบเสร็จ)
   const handleScanGlobal = () => {
     if (receipts.length === 0) return alert('ไม่มีใบเสร็จในระบบ');
-    const randomReceipt = receipts[Math.floor(Math.random() * receipts.length)];
-    handleSelectReceipt(randomReceipt);
+    startCameraScan();
   };
 
   // เช็คว่าสินค้าทุกชิ้นในใบเสร็จถูกสแกนครบจำนวนหรือยัง
@@ -193,12 +224,14 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
   return (
     <div className="p-3 sm:p-6 bg-slate-900 min-h-screen font-sans flex flex-col lg:flex-row gap-4 sm:gap-6 relative">
       
-      {/* ================= MODAL กล้องสแกนจริง ================= */}
+      {/* ================= MODAL กล้องสแกนจริง (วิ่งหาต่อเนื่อง ไม่ปิดเองจนกว่าจะถูก) ================= */}
       {isScannerOpen && (
         <div className="fixed inset-0 bg-black/90 z-50 flex flex-col items-center justify-center p-4">
           <div className="w-full max-w-sm bg-slate-800 rounded-3xl p-4 shadow-2xl border border-slate-700 flex flex-col items-center">
-            <div className="w-full flex justify-between items-center mb-3">
-              <h3 className="text-white font-bold text-sm tracking-wide">สแกน QR Code สินค้า</h3>
+            <div className="w-full flex justify-between items-center mb-2">
+              <h3 className="text-white font-bold text-sm tracking-wide">
+                {!selectedReceipt ? 'สแกน QR เพื่อเปิดใบเสร็จ' : 'สแกน QR ตัดยอดสินค้า'}
+              </h3>
               <button 
                 onClick={stopCameraScan} 
                 className="bg-rose-500/20 text-rose-400 p-2 rounded-full hover:bg-rose-500/30 transition cursor-pointer"
@@ -207,19 +240,26 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
               </button>
             </div>
             
-            {/* กรอบแสดงวิดีโอจากกล้อง */}
+            {/* กล่องแสดงข้อความเตือนชั่วคราวเวลากวาดโดนตัวที่ผิด (กล้องจะไม่ปิด) */}
+            {scanErrorMsg && (
+              <div className="w-full bg-rose-500/20 border border-rose-500/50 text-rose-300 text-[11px] font-semibold px-3 py-1.5 rounded-xl mb-2 text-center animate-pulse">
+                {scanErrorMsg}
+              </div>
+            )}
+            
             <div id="qr-reader-container" className="w-full overflow-hidden rounded-2xl bg-black"></div>
             
             <p className="text-slate-400 text-xs text-center mt-3 leading-relaxed">
-              ส่องกล้องไปที่ QR Code บนสติกเกอร์กล่องสินค้าเพื่อตัดยอดอัตโนมัติ
+              {!selectedReceipt 
+                ? '💡 กวาดกล้องหา QR Code ใบเสร็จ (กล้องจะไม่ปิดจนกว่าจะเจอ)' 
+                : '💡 กวาดกล้องหา QR Code สินค้าเพื่อตัดยอด'}
             </p>
           </div>
         </div>
       )}
 
-      {/* ================= 1. LEFT SIDEBAR (แก้ไขปัญหาภาพซ้อนด้วย relative และ z-10) ================= */}
+      {/* ================= 1. LEFT SIDEBAR ================= */}
       <div className="w-full lg:w-[320px] lg:xl:w-[380px] lg:h-[calc(100vh-3rem)] lg:sticky lg:top-6 bg-[#0b0f19] text-white flex flex-col justify-between p-6 sm:p-8 shrink-0 overflow-hidden rounded-2xl sm:rounded-3xl border border-slate-800 shadow-xl relative">
-        {/* Background Image & Overlay */}
         <div className="absolute inset-0 z-0 opacity-40 mix-blend-luminosity pointer-events-none">
           <img
             src="https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?q=80&w=1000&auto=format&fit=crop"
@@ -229,7 +269,6 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
           <div className="absolute inset-0 bg-gradient-to-t from-[#0b0f19] via-[#0b0f19]/60 to-transparent" />
         </div>
 
-        {/* Top Branding Content (z-10 อยู่บนสุด ป้องกันภาพทับ) */}
         <div className="relative z-10 flex flex-row lg:flex-col justify-between items-center lg:items-start">
           <div>
             <h1 className="text-3xl lg:text-5xl font-black tracking-widest text-white leading-none">
@@ -252,7 +291,6 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
           </div>
         </div>
 
-        {/* Bottom User Info Content (z-10) */}
         <div className="relative z-10 hidden lg:flex">
           <div className="w-full bg-[#1a233a]/80 backdrop-blur-md border border-slate-700/60 rounded-full px-5 py-2.5 flex items-center justify-between shadow-lg">
             <div className="flex items-center gap-2">
@@ -282,7 +320,7 @@ export default function ReceptionTerminal({ currentUser, onLogout }) {
             <div>
               <h2 className="text-lg sm:text-2xl font-serif tracking-wide text-left">Warehouse Automation System</h2>
               <p className="text-[10px] sm:text-[11px] text-slate-400 tracking-[0.1em] sm:tracking-[0.2em] uppercase text-left mt-0.5">
-                ROLE: Reception {currentUser?.username || 'Receipt001'}
+                ROLE: Reception {currentUser?.username || 'Receipt001'} (Live MongoDB)
               </p>
             </div>
           </div>
