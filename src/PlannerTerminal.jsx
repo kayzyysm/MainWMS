@@ -192,19 +192,11 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
     setViewMode('organize');
   };
 
+  // 📌 แก้ไขจุดนี้: ป้องกันการเซ็ตค่าตำแหน่งเริ่มต้นอัตโนมัติ ให้ User ต้องคลิกเลือกเอง
   const handleSelectItem = (item) => {
     setSelectedItemToStore(item);
     setSmartInputQty(Math.min(item.qty, MAX_PALLET_CAPACITY));
-
-    // เช็กตำแหน่งเดิม หรือแนะนำตำแหน่งแรกที่ว่างให้อัตโนมัติ
-    const existing = getExistingLocationsForItem(item.name);
-    if (existing.length > 0) {
-      setSmartTargetLocation(existing[0]);
-    } else {
-      const recommended = getFirstAvailableSlots(1);
-      setSmartTargetLocation(recommended.length > 0 ? recommended[0] : null);
-    }
-
+    setSmartTargetLocation(null); // บังคับให้เป็นค่าว่างเพื่อให้ User เลือกเอง ป้องกันเด้งไป Slot 1
     setIsSmartModalOpen(true);
   };
 
@@ -269,8 +261,8 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
         body: JSON.stringify({ slots: currentSlots })
       });
 
-      // 2. อัปเดต targetLocation ลงในใบเสร็จ
-      const formattedLocation = `${rackId} (${slotName})`; // รูปแบบ: "ZONE-A1 (Slot 4)"
+      // 2. อัปเดต targetLocation ลงในใบเสร็จ (บังคับฟอร์แมตมาตรฐาน "ZONE-XX (Slot Y)")
+      const formattedLocation = `${rackId} (${slotName})`; 
       const updatedItemsForReceipt = selectedReceipt.items.map(it => {
         const itemName = it.productName || it.name;
         if (it.id === selectedItemToStore.id || itemName === selectedItemToStore.name) {
@@ -324,7 +316,7 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
 
   const handleConfirmSmartStore = async () => {
     if (!smartTargetLocation) {
-      alert('กรุณาเลือกตำแหน่งที่ต้องการจัดวางก่อนครับ');
+      alert('⚠️ กรุณาคลิกเลือกตำแหน่งที่ต้องการจัดวางก่อนครับ');
       return;
     }
     const success = await executeStore(smartTargetLocation.rackId, smartTargetLocation.slotName, smartInputQty);
@@ -673,7 +665,7 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
         </div>
       </div>
 
-      {/* 3. POPUP MODAL 1: SMART LOCATION RECOMMENDATION (ปรับปรุงการดึงจุดแนะนำ + แนะนำจุดว่าง) */}
+      {/* 3. POPUP MODAL 1: SMART LOCATION RECOMMENDATION */}
       {isSmartModalOpen && selectedItemToStore && (
         <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-6 w-[560px] shadow-2xl border border-slate-200 animate-fade-in flex flex-col">
@@ -683,7 +675,7 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
                   <Sparkles size={20} />
                 </div>
                 <div>
-                  <h3 className="font-black text-slate-800 text-base">ตำแหน่งจัดเก็บสินค้าแนะนำ</h3>
+                  <h3 className="font-black text-slate-800 text-base">กรุณาเลือกตำแหน่งจัดเก็บสินค้า</h3>
                   <p className="text-xs text-indigo-600 font-bold">{selectedItemToStore.name} (คงเหลือ {selectedItemToStore.qty} ชิ้น)</p>
                 </div>
               </div>
@@ -700,7 +692,7 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
                   <div>
                     <p className="text-xs font-bold text-slate-700 mb-2.5 flex items-center gap-1.5">
                       <MapPin size={14} className="text-indigo-600" /> 
-                      {existingLocs.length > 0 ? 'ตำแหน่งปัจจุบันของสินค้านี้ในคลัง:' : '✨ ตำแหน่งที่ว่างและแนะนำสำหรับสินค้าใหม่:'}
+                      {existingLocs.length > 0 ? 'ตำแหน่งปัจจุบันของสินค้านี้ในคลัง (คลิกเลือกช่องที่ต้องการ):' : '✨ ตำแหน่งที่ว่างและแนะนำ (คลิกเลือกช่องที่ต้องการ):'}
                     </p>
 
                     {displayLocs.length === 0 ? (
@@ -725,7 +717,7 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
                               className={`p-3.5 border-2 rounded-2xl flex items-center justify-between transition ${isFull
                                 ? 'bg-slate-100 border-slate-200 opacity-60 cursor-not-allowed'
                                 : isSelectedLoc
-                                  ? 'bg-indigo-50 border-indigo-600 ring-2 ring-indigo-300 cursor-pointer'
+                                  ? 'bg-indigo-50 border-indigo-600 ring-2 ring-indigo-300 cursor-pointer shadow-md'
                                   : 'bg-white border-slate-200 hover:border-indigo-400 cursor-pointer shadow-sm'
                                 }`}
                             >
@@ -743,7 +735,7 @@ export default function PlannerTerminal({ currentUser, onLogout }) {
                                 </p>
                               </div>
                               <span className={`text-[10px] font-bold px-3 py-1 rounded-xl ${isSelectedLoc ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
-                                {isSelectedLoc ? 'เลือกอยู่' : 'คลิกเลือก'}
+                                {isSelectedLoc ? '✓ เลือกแล้ว' : 'คลิกเลือก'}
                               </span>
                             </div>
                           );
